@@ -4,6 +4,8 @@ import {
   BotSettings,
   StreamSettings,
   PresetDuel,
+  VictoryScore,
+  TikTokStatus,
 } from '../types';
 import { PRESET_DUELS } from '../utils/presets';
 import {
@@ -36,6 +38,12 @@ import {
   QrCode,
   ExternalLink,
   Music,
+  Trophy,
+  Wifi,
+  WifiOff,
+  Activity,
+  Send,
+  Terminal,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -61,6 +69,16 @@ interface AdminPanelProps {
   musicVolume: number;
   onChangeMusicVolume: (volume: number) => void;
   initialTab?: 'first-live' | 'boosters' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music';
+  victoryScore: VictoryScore;
+  onUpdateVictoryScore: (score: VictoryScore) => void;
+  onResetVictoryScore: () => void;
+  tiktokStatus: TikTokStatus;
+  tiktokUsername: string;
+  onChangeTikTokUsername: (username: string) => void;
+  onConnectTikTok: (username: string) => Promise<void>;
+  onDisconnectTikTok: () => Promise<void>;
+  onSendTestTikTokEvent: (type: 'gift' | 'chat', data: any) => Promise<void>;
+  tiktokLogs: Array<{ id: string; timestamp: number; type: 'gift' | 'chat' | 'status' | 'like'; text: string; user?: string }>;
 }
 
 const QUICK_AVATARS = [
@@ -145,6 +163,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   musicVolume,
   onChangeMusicVolume,
   initialTab,
+  victoryScore,
+  onUpdateVictoryScore,
+  onResetVictoryScore,
+  tiktokStatus,
+  tiktokUsername,
+  onChangeTikTokUsername,
+  onConnectTikTok,
+  onDisconnectTikTok,
+  onSendTestTikTokEvent,
+  tiktokLogs,
 }) => {
   const [activeTab, setActiveTab] = useState<'first-live' | 'boosters' | 'music' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream'>(
     initialTab || 'first-live'
@@ -154,6 +182,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [copiedLiveUrl, setCopiedLiveUrl] = useState(false);
   const [copiedAdminUrl, setCopiedAdminUrl] = useState(false);
   const [customTimeInput, setCustomTimeInput] = useState(String(roundDuration));
+  const [isConnectingTikTok, setIsConnectingTikTok] = useState(false);
+  const [testSuccessMessage, setTestSuccessMessage] = useState('');
 
   // Sync initialTab when provided
   React.useEffect(() => {
@@ -271,9 +301,15 @@ tiktokLiveConnection.on('gift', data => {
                   STREAMER PRO
                 </span>
               </h2>
-              <p className="text-[11px] sm:text-xs text-slate-400">
-                Personalize fotos, nomes, tempo das rodadas e automação da live.
-              </p>
+              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Sincronizado ao vivo com a tela pública (0ms)
+                </span>
+                <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 font-bold font-digital">
+                  Série: {victoryScore.left} ✕ {victoryScore.right}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -307,12 +343,74 @@ tiktokLiveConnection.on('gift', data => {
             onClick={() => setActiveTab('boosters')}
             className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
               activeTab === 'boosters'
-                ? 'bg-amber-500 text-zinc-950'
+                ? 'bg-amber-500 text-zinc-950 font-black'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
             <Zap className="w-3.5 h-3.5" />
             <span>Sair do Zero & Votos</span>
+          </button>
+
+          {/* TikTok LIVE Ao Vivo & Testes Nuvem */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('cloud')}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'cloud'
+                ? 'bg-amber-500 text-zinc-950 font-black'
+                : tiktokStatus.status === 'connected'
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/50'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>🔴 TikTok LIVE & Nuvem</span>
+            {tiktokStatus.status === 'connected' && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
+          </button>
+
+          {/* Placar e Tempo */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('round')}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'round'
+                ? 'bg-amber-500 text-zinc-950 font-black'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span>Placar da Série & Tempo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('candidates')}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'candidates'
+                ? 'bg-amber-500 text-zinc-950 font-black'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Mudar Fotos & Nomes</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('bot')}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
+              activeTab === 'bot'
+                ? 'bg-amber-500 text-zinc-950 font-black'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span>Robô Automático</span>
+            {botSettings.enabled && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
           </button>
 
           {/* Nova Aba de Músicas da Live */}
@@ -334,65 +432,10 @@ tiktokLiveConnection.on('gift', data => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('candidates')}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
-              activeTab === 'candidates'
-                ? 'bg-amber-500 text-zinc-950'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>Mudar Fotos & Nomes</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('round')}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
-              activeTab === 'round'
-                ? 'bg-amber-500 text-zinc-950'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            <span>Tempo das Rodadas</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('bot')}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
-              activeTab === 'bot'
-                ? 'bg-amber-500 text-zinc-950'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Bot className="w-3.5 h-3.5" />
-            <span>Robô Automático</span>
-            {botSettings.enabled && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('cloud')}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
-              activeTab === 'cloud'
-                ? 'bg-amber-500 text-zinc-950'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <Radio className="w-3.5 h-3.5" />
-            <span>Live 24h & Presentes</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('presets')}
             className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
               activeTab === 'presets'
-                ? 'bg-amber-500 text-zinc-950'
+                ? 'bg-amber-500 text-zinc-950 font-black'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
@@ -1033,6 +1076,77 @@ tiktokLiveConnection.on('gift', data => {
           {/* TAB 3: TEMPO & RODADAS */}
           {activeTab === 'round' && (
             <div className="space-y-4">
+              {/* Placar Geral de Vitórias (Série Histórica - Nunca Zera) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-yellow-950/60 border-2 border-yellow-500/60 shadow-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-yellow-500/20 text-yellow-300">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm text-white">Placar Geral de Vitórias (Série)</h4>
+                      <p className="text-[11px] text-yellow-200">
+                        Fica gravado na memória do app e nunca zera ao atualizar a página!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 font-digital font-black text-lg sm:text-xl">
+                    <span className="px-3 py-1 rounded-xl bg-blue-600 text-white shadow border border-blue-400">
+                      {victoryScore.left}
+                    </span>
+                    <span className="text-yellow-400 font-sans">✕</span>
+                    <span className="px-3 py-1 rounded-xl bg-red-600 text-white shadow border border-red-400">
+                      {victoryScore.right}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onUpdateVictoryScore({ ...victoryScore, left: victoryScore.left + 1 })}
+                      className="flex-1 py-1.5 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      +1 {leftCandidate.name.split(' ')[0]}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateVictoryScore({ ...victoryScore, left: Math.max(0, victoryScore.left - 1) })}
+                      className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      -1
+                    </button>
+                  </div>
+
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onUpdateVictoryScore({ ...victoryScore, right: victoryScore.right + 1 })}
+                      className="flex-1 py-1.5 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      +1 {rightCandidate.name.split(' ')[0]}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateVictoryScore({ ...victoryScore, right: Math.max(0, victoryScore.right - 1) })}
+                      className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      -1
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onResetVictoryScore}
+                  className="w-full py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Zerar Placar Geral (Iniciar Nova Série do Zero)</span>
+                </button>
+              </div>
               {/* Play / Pause / Reset */}
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -1141,65 +1255,297 @@ tiktokLiveConnection.on('gift', data => {
             </div>
           )}
 
-          {/* TAB 4: LIVE 24H SEM PC/CELULAR & COMO LER PRESENTES */}
+          {/* TAB 4: TIKTOK AO VIVO & TESTES DE LIVE NUVEM */}
           {activeTab === 'cloud' && (
             <div className="space-y-4">
-              {/* Dúvida 1: Como rodar 24h sem PC ou Celular */}
+              {/* Status da Conexão ao Vivo */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/70 border-2 border-indigo-500/50 shadow-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2.5 rounded-2xl ${
+                      tiktokStatus.status === 'connected'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : tiktokStatus.status === 'connecting'
+                        ? 'bg-amber-500/20 text-amber-400 animate-pulse'
+                        : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {tiktokStatus.status === 'connected' ? (
+                        <Wifi className="w-6 h-6 text-emerald-400" />
+                      ) : (
+                        <WifiOff className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-extrabold text-white text-sm sm:text-base">
+                          Conexão TikTok LIVE Ao Vivo
+                        </h3>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider ${
+                          tiktokStatus.status === 'connected'
+                            ? 'bg-emerald-500 text-zinc-950 animate-pulse'
+                            : tiktokStatus.status === 'connecting'
+                            ? 'bg-amber-500 text-zinc-950'
+                            : 'bg-slate-800 text-slate-400'
+                        }`}>
+                          {tiktokStatus.status === 'connected'
+                            ? '🟢 AO VIVO E CONECTADO'
+                            : tiktokStatus.status === 'connecting'
+                            ? '🟡 CONECTANDO...'
+                            : '🔴 DESCONECTADO'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {tiktokStatus.status === 'connected'
+                          ? `Capturando presentes e comentários em tempo real da live de @${tiktokStatus.username || tiktokUsername}`
+                          : 'Digite o seu @ do TikTok e clique em conectar para puxar dados ao vivo sem senha.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form de Conexão */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-800">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">@</span>
+                    <input
+                      type="text"
+                      value={tiktokUsername}
+                      onChange={(e) => onChangeTikTokUsername(e.target.value.replace(/^@/, ''))}
+                      placeholder="seu_usuario_tiktok (ex: arenadointer)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+
+                  {tiktokStatus.status === 'connected' ? (
+                    <button
+                      type="button"
+                      onClick={() => onDisconnectTikTok()}
+                      className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <WifiOff className="w-4 h-4" />
+                      <span>Desconectar Live</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isConnectingTikTok || !tiktokUsername.trim()}
+                      onClick={async () => {
+                        setIsConnectingTikTok(true);
+                        try {
+                          await onConnectTikTok(tiktokUsername);
+                        } finally {
+                          setIsConnectingTikTok(false);
+                        }
+                      }}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-zinc-950 font-black text-xs cursor-pointer active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-lg disabled:opacity-50"
+                    >
+                      <Wifi className="w-4 h-4" />
+                      <span>{isConnectingTikTok ? 'Conectando...' : '🔴 CONECTAR NA LIVE'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {tiktokStatus.lastError && (
+                  <div className="p-2.5 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs">
+                    ⚠️ {tiktokStatus.lastError}
+                  </div>
+                )}
+
+                {/* Estatísticas da Live */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 block uppercase">Espectadores</span>
+                    <span className="text-base font-digital font-black text-emerald-400">
+                      {tiktokStatus.viewers || 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center">
+                    <span className="text-[10px] text-slate-400 block uppercase">Curtidas na Live</span>
+                    <span className="text-base font-digital font-black text-pink-400">
+                      {tiktokStatus.totalLikes || 0}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center col-span-2 sm:col-span-1">
+                    <span className="text-[10px] text-slate-400 block uppercase">Canal Alvo</span>
+                    <span className="text-xs font-bold text-amber-300 truncate block">
+                      @{tiktokStatus.username || tiktokUsername || 'nenhum'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* TESTES DE LIVE NUVEM */}
+              <div className="p-4 rounded-2xl bg-slate-950 border-2 border-amber-500/40 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                      <Rocket className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm text-white">
+                        Ambiente de Testes de Live Nuvem
+                      </h4>
+                      <p className="text-[11px] text-amber-200/80">
+                        Dispare eventos de teste para validar a nuvem antes de abrir a live:
+                      </p>
+                    </div>
+                  </div>
+                  {testSuccessMessage && (
+                    <span className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500 text-zinc-950 font-black animate-fade-in">
+                      {testSuccessMessage}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onSendTestTikTokEvent('gift', {
+                        giftName: leftCandidate.primaryGift.name || 'Rosa',
+                        repeatCount: 1,
+                        diamondCount: 1,
+                        uniqueId: '@fa_da_live',
+                      });
+                      setTestSuccessMessage('🌹 Rosa de teste enviada!');
+                      setTimeout(() => setTestSuccessMessage(''), 2500);
+                    }}
+                    className="p-2.5 rounded-xl bg-blue-950/80 hover:bg-blue-900 border border-blue-500/50 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  >
+                    <span>{leftCandidate.primaryGift.icon || '🌹'}</span>
+                    <span>Testar {leftCandidate.primaryGift.name} (+1 Esquerda)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onSendTestTikTokEvent('gift', {
+                        giftName: rightCandidate.primaryGift.name || 'Sorvete',
+                        repeatCount: 1,
+                        diamondCount: 1,
+                        uniqueId: '@fa_da_live',
+                      });
+                      setTestSuccessMessage('🍦 Sorvete de teste enviado!');
+                      setTimeout(() => setTestSuccessMessage(''), 2500);
+                    }}
+                    className="p-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-500/50 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  >
+                    <span>{rightCandidate.primaryGift.icon || '🍦'}</span>
+                    <span>Testar {rightCandidate.primaryGift.name} (+1 Direita)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onSendTestTikTokEvent('chat', {
+                        comment: leftCandidate.number,
+                        uniqueId: '@comentarista_22',
+                      });
+                      setTestSuccessMessage(`💬 Comentário "${leftCandidate.number}" enviado!`);
+                      setTimeout(() => setTestSuccessMessage(''), 2500);
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  >
+                    <span>💬</span>
+                    <span>Comentar "{leftCandidate.number}"</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onSendTestTikTokEvent('chat', {
+                        comment: rightCandidate.number,
+                        uniqueId: '@comentarista_13',
+                      });
+                      setTestSuccessMessage(`💬 Comentário "${rightCandidate.number}" enviado!`);
+                      setTimeout(() => setTestSuccessMessage(''), 2500);
+                    }}
+                    className="p-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                  >
+                    <span>💬</span>
+                    <span>Comentar "{rightCandidate.number}"</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await onSendTestTikTokEvent('gift', {
+                        giftName: 'Leão Lendário',
+                        repeatCount: 1,
+                        diamondCount: 100,
+                        uniqueId: '@baleia_lendaria',
+                      });
+                      setTestSuccessMessage('🦁 Super Presente Leão enviado!');
+                      setTimeout(() => setTestSuccessMessage(''), 2500);
+                    }}
+                    className="p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all col-span-2 sm:col-span-2 shadow"
+                  >
+                    <span>🦁</span>
+                    <span>Simular Mega Presente (Leão Lendário +100 Pontos)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* TERMINAL DE LOGS DA NUVEM EM TEMPO REAL */}
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                    <Terminal className="w-4 h-4" />
+                    <span>Terminal de Eventos da Nuvem (Logs em Tempo Real)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {tiktokLogs.length} eventos registrados
+                  </span>
+                </div>
+
+                <div className="h-36 overflow-y-auto bg-black p-2.5 rounded-xl font-mono text-[11px] text-slate-300 border border-zinc-900 space-y-1">
+                  {tiktokLogs.length === 0 ? (
+                    <div className="text-slate-600 text-center py-6">
+                      Aguardando eventos da live... (clique nos botões de teste acima para testar)
+                    </div>
+                  ) : (
+                    tiktokLogs.map((log) => (
+                      <div key={log.id} className="flex items-start gap-2 leading-tight">
+                        <span className="text-slate-500 shrink-0">
+                          {new Date(log.timestamp).toLocaleTimeString()}
+                        </span>
+                        <span className={`px-1 py-0.2 rounded text-[9px] font-black uppercase shrink-0 ${
+                          log.type === 'gift' ? 'bg-pink-500/20 text-pink-300' :
+                          log.type === 'chat' ? 'bg-blue-500/20 text-blue-300' :
+                          log.type === 'like' ? 'bg-red-500/20 text-red-300' :
+                          'bg-amber-500/20 text-amber-300'
+                        }`}>
+                          {log.type}
+                        </span>
+                        <span className="truncate">{log.text}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Guia VPS & Nuvem */}
               <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-950/60 to-slate-950 border border-indigo-500/40 space-y-2">
                 <div className="flex items-center gap-2 text-indigo-300 font-black text-sm">
                   <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                  <span>Dúvida 1: Como fazer Live 24 Horas sem Celular ou PC Ligado?</span>
+                  <span>Como Transmitir 24 Horas na Nuvem sem Celular/PC Ligado</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Para rodar 24 horas por dia sem esquentar seu celular nem gastar energia do seu computador, o segredo da indústria de lives interativas é rodar em uma <strong>VPS Cloud (Servidor em Nuvem)</strong>:
+                  Para rodar 24h na nuvem sem gastar energia:
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
-                    <strong className="text-amber-400 text-xs block">Opção A: Servidor VPS Linux (R$ 20/mês)</strong>
+                    <strong className="text-amber-400 text-xs block">Opção A: Servidor VPS Linux</strong>
                     <p className="text-[11px] text-slate-400">
-                      Você aluga uma VPS na <em>DigitalOcean, Oracle Cloud (tem grátis), Contabo ou Hetzner</em>. Ela roda um navegador headless e envia o sinal de vídeo para o TikTok via FFmpeg ou OBS Virtual com sua Chave de Transmissão (RTMP).
+                      Alugue uma VPS (Oracle Cloud Always Free ou Contabo/DigitalOcean). Roda navegador headless enviando sinal RTMP com sua chave de live do TikTok.
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
                     <strong className="text-emerald-400 text-xs block">Opção B: Plataforma Pronta (Zero Código)</strong>
                     <p className="text-[11px] text-slate-400">
-                      Serviços como <em>GoStream, Restream ou Live24.pro</em> permitem colar o link da página do jogo e a Chave de Live do seu TikTok. Eles transmitem na nuvem 24/7 automaticamente.
+                      Serviços como <em>GoStream ou Live24.pro</em> permitem colar o link do jogo e a Chave de Live. Transmitem 24/7 automaticamente na nuvem.
                     </p>
                   </div>
-                </div>
-              </div>
-
-              {/* Dúvida 2: Como capturar presentes do TikTok para pontuar */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-amber-400 font-black text-sm">
-                    <Code className="w-5 h-5" />
-                    <span>Dúvida 2: Como o app interpreta os presentes do TikTok?</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={copyConnectorScript}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold cursor-pointer transition-colors"
-                  >
-                    {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedCode ? 'Código Copiado!' : 'Copiar Script Node'}</span>
-                  </button>
-                </div>
-
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  O TikTok utiliza conexões WebSocket via <strong>Protobuf</strong>. A biblioteca oficial da comunidade é a <code>tiktok-live-connector</code> (Node.js). Ela conecta na sua live sem precisar de senha, apenas com o seu <code>@usuario</code>:
-                </p>
-
-                <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 text-[10.5px] font-mono text-emerald-400 overflow-x-auto space-y-1">
-                  <div>1. No terminal: <span className="text-white">npm install tiktok-live-connector</span></div>
-                  <div>2. Quando alguém manda uma <span className="text-pink-400">🌹 Rosa</span>, o evento dispara:</div>
-                  <div className="text-slate-400 pl-3">tiktokLive.on('gift', data =&gt; somarVoto(data.giftName));</div>
-                  <div>3. Quando alguém comenta <span className="text-blue-400">"22"</span> ou <span className="text-red-400">"13"</span>:</div>
-                  <div className="text-slate-400 pl-3">tiktokLive.on('chat', data =&gt; somarVoto(data.comment));</div>
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-200">
-                  💡 <strong>Modo Piloto Automático já embutido:</strong> Enquanto você não configura o script ou quer aquecer a live, use o <strong>Robô Automático</strong> na aba ao lado, que já gera os comentários e presentes sozinho!
                 </div>
               </div>
             </div>

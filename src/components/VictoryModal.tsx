@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { Candidate } from '../types';
+import { Candidate, VictoryScore } from '../types';
 import { Trophy, Flame, Play, Sparkles } from 'lucide-react';
 import { playVictoryFanfare } from '../utils/audio';
 
@@ -13,6 +13,7 @@ interface VictoryModalProps {
   roundNumber: number;
   resetCountdown: number;
   onForceNextRound: () => void;
+  victoryScore: VictoryScore;
 }
 
 export const VictoryModal: React.FC<VictoryModalProps> = ({
@@ -24,6 +25,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
   roundNumber,
   resetCountdown,
   onForceNextRound,
+  victoryScore,
 }) => {
   useEffect(() => {
     playVictoryFanfare();
@@ -156,6 +158,36 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
               {rightPoints}
             </span>
             <span className="text-xs font-bold text-slate-300">{rightPct}% dos votos</span>
+          </div>
+        </div>
+
+        {/* Placar Geral de Vitórias (Série Histórica - Nunca Zera) */}
+        <div className="w-full my-2 p-3 rounded-2xl bg-black/90 border-2 border-yellow-400/80 shadow-xl flex flex-col items-center">
+          <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-yellow-300 mb-1">
+            <Trophy className="w-3.5 h-3.5 text-yellow-400" />
+            <span>PLACAR GERAL DE VITÓRIAS</span>
+          </div>
+          <div className="flex items-center gap-4 font-digital font-black text-2xl">
+            <div className="flex items-center gap-1.5 text-blue-400">
+              <span className="text-xs text-slate-400">{leftCandidate.name.split(' ')[0]}:</span>
+              <span className="px-2.5 py-0.5 rounded-lg bg-blue-600/30 border border-blue-500 text-white">
+                {victoryScore.left}
+              </span>
+            </div>
+            <span className="text-yellow-400 text-xl font-sans font-bold">✕</span>
+            <div className="flex items-center gap-1.5 text-red-400">
+              <span className="px-2.5 py-0.5 rounded-lg bg-red-600/30 border border-red-500 text-white">
+                {victoryScore.right}
+              </span>
+              <span className="text-xs text-slate-400">:{rightCandidate.name.split(' ')[0]}</span>
+            </div>
+          </div>
+          <div className="text-[10px] text-slate-400 mt-1">
+            {victoryScore.left > victoryScore.right
+              ? `🏆 ${leftCandidate.name} lidera a série geral!`
+              : victoryScore.right > victoryScore.left
+              ? `🏆 ${rightCandidate.name} lidera a série geral!`
+              : '⚡ Série empatada! Tudo igual no placar geral!'}
           </div>
         </div>
 

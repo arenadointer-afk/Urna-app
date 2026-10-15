@@ -1,5 +1,4 @@
-import React from 'react';
-import { Candidate } from '../types';
+import { Candidate, VictoryScore } from '../types';
 
 interface TopHeaderProps {
   leftCandidate: Candidate;
@@ -8,6 +7,8 @@ interface TopHeaderProps {
   rightPoints: number;
   timeLeft: number;
   onOpenAdmin: () => void;
+  victoryScore: VictoryScore;
+  roundNumber: number;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -17,6 +18,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   rightPoints,
   timeLeft,
   onOpenAdmin,
+  victoryScore,
+  roundNumber,
 }) => {
   const total = leftPoints + rightPoints;
   const difference = Math.abs(leftPoints - rightPoints);
@@ -56,6 +59,31 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <div className="px-5 py-0.5 -mt-1 rounded-full bg-gradient-to-r from-blue-700 via-blue-500 to-blue-700 border-2 border-yellow-300 shadow-md">
             <span className="text-[10px] sm:text-xs font-black tracking-widest text-white uppercase drop-shadow">
               INTERATIVO
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* PLACAR DE VITÓRIAS GERAL DA SÉRIE (NUNCA ZERA AO RECARREGAR) */}
+      <div className="w-full max-w-md flex items-center justify-between px-2 py-0.5 mb-1 bg-black/70 rounded-full border border-amber-500/40 shadow-lg">
+        <div className="flex items-center gap-1.5 pl-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span className="text-[10px] font-black tracking-wider text-amber-400 uppercase">
+            RODADA #{roundNumber}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 pr-1">
+          <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-300">
+            PLACAR DE VITÓRIAS:
+          </span>
+          <div className="flex items-center gap-1 font-digital font-black text-xs sm:text-sm">
+            <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white shadow border border-blue-400">
+              {victoryScore.left}
+            </span>
+            <span className="text-yellow-400 font-extrabold text-xs">✕</span>
+            <span className="px-2 py-0.5 rounded-md bg-red-600 text-white shadow border border-red-400">
+              {victoryScore.right}
             </span>
           </div>
         </div>

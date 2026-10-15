@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Candidate,
   ChatMessage,
   BotSettings,
   StreamSettings,
   PresetDuel,
+  VictoryScore,
+  TikTokStatus,
 } from './types';
 import { PRESET_DUELS } from './utils/presets';
 import { TopHeader } from './components/TopHeader';
@@ -23,6 +25,23 @@ import {
   initAudioContext,
   MusicTrackType,
 } from './utils/audio';
+import {
+  getSavedCandidate,
+  saveCandidate,
+  getSavedRoundDuration,
+  saveRoundDuration,
+  getSavedVictoryScore,
+  saveVictoryScore,
+  getSavedPoints,
+  savePoints,
+  getSavedRoundNumber,
+  saveRoundNumber,
+  getSavedTikTokConfig,
+  saveTikTokConfig,
+  broadcastSync,
+  subscribeToSync,
+  TikTokConfig,
+} from './utils/syncStorage';
 
 const RANDOM_USERNAMES = [
   '@Mara',
@@ -42,40 +61,44 @@ const RANDOM_USERNAMES = [
 ];
 
 export default function App() {
-  // Preset & Candidates
-  const [leftCandidate, setLeftCandidate] = useState<Candidate>(PRESET_DUELS[0].left);
-  const [rightCandidate, setRightCandidate] = useState<Candidate>(PRESET_DUELS[0].right);
+  // Preset & Candidates (Carregados da memória persistente)
+  const [leftCandidate, setLeftCandidate] = useState<Candidate>(() => getSavedCandidate('left'));
+  const [rightCandidate, setRightCandidate] = useState<Candidate>(() => getSavedCandidate('right'));
 
-  // Game & Round State (Default duration 125s = 02:05)
-  const [roundNumber, setRoundNumber] = useState(1);
-  const [roundDuration, setRoundDuration] = useState(125);
-  const [timeLeft, setTimeLeft] = useState(125);
-  const [isPaused, setIsPaused] = useState(false);
+  // Game & Round State (Carregados da memória persistente)
+  const [roundNumber, setRoundNumber] = useState<number>(() => getSavedRoundNumber(1));
+  const [roundDuration, setRoundDuration] = useState<number>(() => getSavedRoundDuration(125));
+  const [timeLeft, setTimeLeft] = useState<number>(() => getSavedRoundDuration(125));
+  const [isPaused, setIsPaused] = useState<boolean>(false);
 
-  // Points (start with lively scores)
-  const [leftPoints, setLeftPoints] = useState(56);
-  const [rightPoints, setRightPoints] = useState(88);
-  const [leftGiftsCount, setLeftGiftsCount] = useState(56);
-  const [rightGiftsCount, setRightGiftsCount] = useState(89);
+  // Placar Geral de Vitórias (Série - NUNCA ZERA ao atualizar a página)
+  const [victoryScore, setVictoryScore] = useState<VictoryScore>(() => getSavedVictoryScore());
+
+  // Points (Carregados da memória persistente para não zerar no refresh acidental)
+  const savedPoints = getSavedPoints();
+  const [leftPoints, setLeftPoints] = useState<number>(savedPoints.leftPoints);
+  const [rightPoints, setRightPoints] = useState<number>(savedPoints.rightPoints);
+  const [leftGiftsCount, setLeftGiftsCount] = useState<number>(savedPoints.leftGifts);
+  const [rightGiftsCount, setRightGiftsCount] = useState<number>(savedPoints.rightGifts);
 
   // 5-comment rule: 5 comentários número 22 = 1 ponto | 5 comentários número 13 = 1 ponto
-  const [leftCommentProgress, setLeftCommentProgress] = useState(2);
-  const [rightCommentProgress, setRightCommentProgress] = useState(3);
+  const [leftCommentProgress, setLeftCommentProgress] = useState<number>(0);
+  const [rightCommentProgress, setRightCommentProgress] = useState<number>(0);
 
-  // Last Vote Tickers (@Mara / @Lucimara)
+  // Last Vote Tickers
   const [lastLeftUser, setLastLeftUser] = useState<string>('@Mara');
   const [lastLeftText, setLastLeftText] = useState<string>('Rosa x2 • +2 pontos');
   const [lastRightUser, setLastRightUser] = useState<string>('@Lucimara');
   const [lastRightText, setLastRightText] = useState<string>('Sorvete x2 • +2 pontos');
 
   // Round Over & Victory
-  const [isRoundOver, setIsRoundOver] = useState(false);
+  const [isRoundOver, setIsRoundOver] = useState<boolean>(false);
   const [winner, setWinner] = useState<'left' | 'right' | 'draw' | null>(null);
-  const [resetCountdown, setResetCountdown] = useState(5);
+  const [resetCountdown, setResetCountdown] = useState<number>(5);
 
   // Animation Triggers
-  const [lastLeftVoteTimestamp, setLastLeftVoteTimestamp] = useState(0);
-  const [lastRightVoteTimestamp, setLastRightVoteTimestamp] = useState(0);
+  const [lastLeftVoteTimestamp, setLastLeftVoteTimestamp] = useState<number>(0);
+  const [lastRightVoteTimestamp, setLastRightVoteTimestamp] = useState<number>(0);
   const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
   const [epicGift, setEpicGift] = useState<EpicGiftData | null>(null);
 
@@ -105,7 +128,7 @@ export default function App() {
     },
   ]);
 
-  // Admin & Password Authentication (Senha: 851985)
+  // Admin & Modals
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isShareLinksOpen, setIsShareLinksOpen] = useState(false);
@@ -120,7 +143,26 @@ export default function App() {
   const [musicTrack, setMusicTrack] = useState<MusicTrackType>('off');
   const [musicVolumeState, setMusicVolumeState] = useState(0.5);
 
-  // BOT STARTS INITIALLY DISABLED AS REQUESTED ("A live tem que iniciar sem os bots ativado")
+  // TikTok LIVE Ao Vivo & Testes de Nuvem State
+  const savedTikTok = getSavedTikTokConfig();
+  const [tiktokUsername, setTiktokUsername] = useState<string>(savedTikTok.username || '');
+  const [tiktokStatus, setTiktokStatus] = useState<TikTokStatus>({
+    status: 'disconnected',
+    username: savedTikTok.username || '',
+    viewers: 0,
+    totalLikes: 0,
+    lastError: '',
+  });
+  const [tiktokLogs, setTiktokLogs] = useState<Array<{ id: string; timestamp: number; type: 'gift' | 'chat' | 'status' | 'like'; text: string; user?: string }>>([]);
+
+  const addTiktokLog = useCallback((type: 'gift' | 'chat' | 'status' | 'like', text: string, user?: string) => {
+    setTiktokLogs((prev) => [
+      { id: `${Date.now()}-${Math.random()}`, timestamp: Date.now(), type, text, user },
+      ...prev.slice(0, 49),
+    ]);
+  }, []);
+
+  // Bot Settings
   const [botSettings, setBotSettings] = useState<BotSettings>({
     enabled: false,
     intensity: 'hype',
@@ -165,6 +207,45 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Salvar pontos persistentes no localStorage
+  useEffect(() => {
+    savePoints({ leftPoints, rightPoints, leftGifts: leftGiftsCount, rightGifts: rightGiftsCount });
+  }, [leftPoints, rightPoints, leftGiftsCount, rightGiftsCount]);
+
+  // Sincronização em tempo real entre abas (BroadcastChannel)
+  useEffect(() => {
+    const unsubscribe = subscribeToSync((msg) => {
+      if (msg.type === 'UPDATE_CANDIDATE') {
+        if (msg.side === 'left') setLeftCandidate(msg.candidate);
+        else setRightCandidate(msg.candidate);
+      } else if (msg.type === 'UPDATE_ALL_CANDIDATES') {
+        setLeftCandidate(msg.left);
+        setRightCandidate(msg.right);
+      } else if (msg.type === 'UPDATE_POINTS') {
+        setLeftPoints(msg.leftPoints);
+        setRightPoints(msg.rightPoints);
+        setLeftGiftsCount(msg.leftGifts);
+        setRightGiftsCount(msg.rightGifts);
+      } else if (msg.type === 'UPDATE_TIME') {
+        setTimeLeft(msg.timeLeft);
+        setIsPaused(msg.isPaused);
+        if (msg.roundDuration) setRoundDuration(msg.roundDuration);
+      } else if (msg.type === 'UPDATE_VICTORY_SCORE') {
+        setVictoryScore(msg.victoryScore);
+      } else if (msg.type === 'UPDATE_ROUND_NUMBER') {
+        setRoundNumber(msg.roundNumber);
+      } else if (msg.type === 'UPDATE_BOT_SETTINGS') {
+        setBotSettings(msg.botSettings);
+      } else if (msg.type === 'UPDATE_STREAM_SETTINGS') {
+        setStreamSettings(msg.streamSettings);
+      } else if (msg.type === 'RESET_ROUND') {
+        handleLocalRestartRound();
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
   const toggleSound = () => {
@@ -235,14 +316,34 @@ export default function App() {
         : `${giftName || 'Voto'} • +${amount} ponto`;
 
       if (side === 'left') {
-        setLeftPoints((prev) => prev + amount);
+        setLeftPoints((prev) => {
+          const next = prev + amount;
+          broadcastSync({
+            type: 'UPDATE_POINTS',
+            leftPoints: next,
+            rightPoints,
+            leftGifts: leftGiftsCount + (isGift ? (amount > 1 ? amount : 1) : 0),
+            rightGifts: rightGiftsCount,
+          });
+          return next;
+        });
         if (isGift) setLeftGiftsCount((prev) => prev + (amount > 1 ? amount : 1));
         setLastLeftVoteTimestamp(Date.now());
         setLastLeftUser(user);
         setLastLeftText(actionText);
         spawnReaction(giftIcon || leftCandidate.primaryGift.icon, 'left');
       } else {
-        setRightPoints((prev) => prev + amount);
+        setRightPoints((prev) => {
+          const next = prev + amount;
+          broadcastSync({
+            type: 'UPDATE_POINTS',
+            leftPoints,
+            rightPoints: next,
+            leftGifts: leftGiftsCount,
+            rightGifts: rightGiftsCount + (isGift ? (amount > 1 ? amount : 1) : 0),
+          });
+          return next;
+        });
         if (isGift) setRightGiftsCount((prev) => prev + (amount > 1 ? amount : 1));
         setLastRightVoteTimestamp(Date.now());
         setLastRightUser(user);
@@ -281,69 +382,172 @@ export default function App() {
 
       setChatMessages((prev) => [...prev.slice(-20), newMsg]);
     },
-    [isRoundOver, leftCandidate, rightCandidate, spawnReaction]
+    [isRoundOver, leftCandidate, rightCandidate, leftPoints, rightPoints, leftGiftsCount, rightGiftsCount, spawnReaction]
   );
 
   // Manual Chat Message: 5 comments with number = +1 point!
-  const handleUserChatMessage = (text: string) => {
-    const trimmed = text.trim();
-    const hasLeft = trimmed.includes(leftCandidate.number) || trimmed.toLowerCase().includes('bolsonaro');
-    const hasRight = trimmed.includes(rightCandidate.number) || trimmed.toLowerCase().includes('lula');
+  const handleUserChatMessage = useCallback(
+    (text: string, customAuthor?: string) => {
+      const trimmed = text.trim();
+      const author = customAuthor || '@Voce';
+      const hasLeft =
+        trimmed.includes(leftCandidate.number) ||
+        trimmed.toLowerCase().includes(leftCandidate.name.split(' ')[0].toLowerCase());
+      const hasRight =
+        trimmed.includes(rightCandidate.number) ||
+        trimmed.toLowerCase().includes(rightCandidate.name.split(' ')[0].toLowerCase());
 
-    if (hasLeft) {
-      setLeftCommentProgress((prev) => {
-        const next = prev + 1;
-        if (next >= 5) {
-          handleVote('left', 1, '5 Comentários no Chat', '💬', '@Voce');
-          return 0;
-        }
-        setChatMessages((c) => [
-          ...c.slice(-20),
+      if (hasLeft) {
+        setLeftCommentProgress((prev) => {
+          const next = prev + 1;
+          if (next >= 5) {
+            handleVote('left', 1, '5 Comentários no Chat', '💬', author);
+            return 0;
+          }
+          setChatMessages((c) => [
+            ...c.slice(-20),
+            {
+              id: `cmt-${Date.now()}-${Math.random()}`,
+              username: author,
+              avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+              text: `${leftCandidate.number} (${next}/5 p/ +1 ponto)`,
+              side: 'left',
+              timestamp: Date.now(),
+            },
+          ]);
+          return next;
+        });
+      } else if (hasRight) {
+        setRightCommentProgress((prev) => {
+          const next = prev + 1;
+          if (next >= 5) {
+            handleVote('right', 1, '5 Comentários no Chat', '💬', author);
+            return 0;
+          }
+          setChatMessages((c) => [
+            ...c.slice(-20),
+            {
+              id: `cmt-${Date.now()}-${Math.random()}`,
+              username: author,
+              avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+              text: `${rightCandidate.number} (${next}/5 p/ +1 ponto)`,
+              side: 'right',
+              timestamp: Date.now(),
+            },
+          ]);
+          return next;
+        });
+      } else {
+        setChatMessages((prev) => [
+          ...prev.slice(-20),
           {
-            id: `cmt-${Date.now()}`,
-            username: '@Voce',
+            id: `msg-${Date.now()}-${Math.random()}`,
+            username: author,
             avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-            text: `${leftCandidate.number} (${next}/5 p/ +1 ponto)`,
-            side: 'left',
+            text: trimmed,
+            side: 'neutral',
             timestamp: Date.now(),
           },
         ]);
-        return next;
-      });
-    } else if (hasRight) {
-      setRightCommentProgress((prev) => {
-        const next = prev + 1;
-        if (next >= 5) {
-          handleVote('right', 1, '5 Comentários no Chat', '💬', '@Voce');
-          return 0;
+      }
+    },
+    [leftCandidate, rightCandidate, handleVote]
+  );
+
+  // Conexão em tempo real com o backend SSE para TikTok LIVE Ao Vivo e testes da nuvem
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/tiktok/stream');
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'status') {
+            setTiktokStatus({
+              status: data.status,
+              username: data.username,
+              viewers: data.viewers || 0,
+              totalLikes: data.totalLikes || 0,
+              lastError: data.lastError || '',
+            });
+            addTiktokLog(
+              'status',
+              `TikTok LIVE: ${data.status} ${data.lastError ? `(${data.lastError})` : ''}`
+            );
+          } else if (data.type === 'chat') {
+            const comment = String(data.comment || '').trim();
+            handleUserChatMessage(comment, data.uniqueId);
+            addTiktokLog('chat', `[Chat] ${data.uniqueId}: ${comment}`, data.uniqueId);
+          } else if (data.type === 'gift') {
+            const giftName = String(data.giftName || 'Presente').toLowerCase();
+            const repeatCount = Number(data.repeatCount || 1);
+            const diamondCount = Number(data.diamondCount || 1);
+            const user = data.uniqueId || '@fa_tiktok';
+
+            const leftGift = leftCandidate.primaryGift.name.toLowerCase();
+            const rightGift = rightCandidate.primaryGift.name.toLowerCase();
+
+            if (giftName.includes(leftGift) || giftName.includes('rosa') || giftName.includes('rose')) {
+              handleVote('left', repeatCount, data.giftName, leftCandidate.primaryGift.icon, user);
+            } else if (
+              giftName.includes(rightGift) ||
+              giftName.includes('sorvete') ||
+              giftName.includes('ice cream')
+            ) {
+              handleVote('right', repeatCount, data.giftName, rightCandidate.primaryGift.icon, user);
+            } else if (
+              diamondCount >= 10 ||
+              giftName.includes('leão') ||
+              giftName.includes('lion') ||
+              giftName.includes('galáxia') ||
+              giftName.includes('galaxy')
+            ) {
+              // Super presente épico na live!
+              const targetSide: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
+              handleVote(
+                targetSide,
+                diamondCount >= 50 ? 100 : diamondCount,
+                data.giftName,
+                '🦁',
+                user
+              );
+            } else {
+              // Presente genérico
+              const side: 'left' | 'right' = Math.random() > 0.5 ? 'left' : 'right';
+              handleVote(
+                side,
+                repeatCount,
+                data.giftName,
+                side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon,
+                user
+              );
+            }
+
+            addTiktokLog(
+              'gift',
+              `🎁 ${user} mandou ${repeatCount}x ${data.giftName} (${diamondCount} diamantes)`,
+              user
+            );
+          } else if (data.type === 'like') {
+            setTiktokStatus((prev) => ({
+              ...prev,
+              totalLikes: data.totalLikes || prev.totalLikes + (data.likeCount || 1),
+            }));
+            spawnReaction('❤️', Math.random() > 0.5 ? 'left' : 'right');
+          }
+        } catch (e) {
+          console.error('Erro ao processar mensagem do SSE', e);
         }
-        setChatMessages((c) => [
-          ...c.slice(-20),
-          {
-            id: `cmt-${Date.now()}`,
-            username: '@Voce',
-            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-            text: `${rightCandidate.number} (${next}/5 p/ +1 ponto)`,
-            side: 'right',
-            timestamp: Date.now(),
-          },
-        ]);
-        return next;
-      });
-    } else {
-      setChatMessages((prev) => [
-        ...prev.slice(-20),
-        {
-          id: `msg-${Date.now()}`,
-          username: '@Voce',
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-          text: trimmed,
-          side: 'neutral',
-          timestamp: Date.now(),
-        },
-      ]);
+      };
+    } catch (e) {
+      console.warn('SSE EventSource não suportado no ambiente', e);
     }
-  };
+
+    return () => {
+      eventSource?.close();
+    };
+  }, [leftCandidate, rightCandidate, handleVote, handleUserChatMessage, addTiktokLog, spawnReaction]);
 
   // Sair do Zero & Fake Booster Handlers
   const handleInjectVotes = (
@@ -365,25 +569,64 @@ export default function App() {
   // Make Clutch
   const handleMakeClutch = () => {
     if (leftPoints >= rightPoints) {
-      setRightPoints(Math.max(1, leftPoints - 1));
+      const nextRight = Math.max(1, leftPoints - 1);
+      setRightPoints(nextRight);
+      broadcastSync({
+        type: 'UPDATE_POINTS',
+        leftPoints,
+        rightPoints: nextRight,
+        leftGifts: leftGiftsCount,
+        rightGifts: rightGiftsCount,
+      });
     } else {
-      setLeftPoints(Math.max(1, rightPoints - 1));
+      const nextLeft = Math.max(1, rightPoints - 1);
+      setLeftPoints(nextLeft);
+      broadcastSync({
+        type: 'UPDATE_POINTS',
+        leftPoints: nextLeft,
+        rightPoints,
+        leftGifts: leftGiftsCount,
+        rightGifts: rightGiftsCount,
+      });
     }
+  };
+
+  // Atualizar Candidato (com persistência e broadcast instantâneo)
+  const handleUpdateCandidate = (side: 'left' | 'right', candidate: Candidate) => {
+    if (side === 'left') {
+      setLeftCandidate(candidate);
+      saveCandidate('left', candidate);
+    } else {
+      setRightCandidate(candidate);
+      saveCandidate('right', candidate);
+    }
+    broadcastSync({ type: 'UPDATE_CANDIDATE', side, candidate });
   };
 
   // Preset Selection
   const handleSelectPreset = (preset: PresetDuel) => {
     setLeftCandidate(preset.left);
     setRightCandidate(preset.right);
+    saveCandidate('left', preset.left);
+    saveCandidate('right', preset.right);
+    broadcastSync({ type: 'UPDATE_ALL_CANDIDATES', left: preset.left, right: preset.right });
     setLeftPoints(0);
     setRightPoints(0);
     setLeftGiftsCount(0);
     setRightGiftsCount(0);
     setTimeLeft(roundDuration);
+    savePoints({ leftPoints: 0, rightPoints: 0, leftGifts: 0, rightGifts: 0 });
+    broadcastSync({
+      type: 'UPDATE_POINTS',
+      leftPoints: 0,
+      rightPoints: 0,
+      leftGifts: 0,
+      rightGifts: 0,
+    });
   };
 
-  // Restart Round
-  const handleRestartRound = () => {
+  // Local Restart Round
+  const handleLocalRestartRound = () => {
     setIsRoundOver(false);
     setTimeLeft(roundDuration);
     setLeftPoints(0);
@@ -391,14 +634,113 @@ export default function App() {
     setLeftGiftsCount(0);
     setRightGiftsCount(0);
     setWinner(null);
+    savePoints({ leftPoints: 0, rightPoints: 0, leftGifts: 0, rightGifts: 0 });
+  };
+
+  // Restart Round
+  const handleRestartRound = () => {
+    handleLocalRestartRound();
+    broadcastSync({ type: 'RESET_ROUND' });
   };
 
   const handleForceNextRound = () => {
-    setRoundNumber((r) => r + 1);
+    const nextR = roundNumber + 1;
+    setRoundNumber(nextR);
+    saveRoundNumber(nextR);
+    broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: nextR });
     handleRestartRound();
   };
 
-  // Round Timer Countdown Loop
+  // Atualizar Duração da Rodada
+  const handleChangeRoundDuration = (d: number) => {
+    setRoundDuration(d);
+    setTimeLeft(d);
+    saveRoundDuration(d);
+    broadcastSync({ type: 'UPDATE_TIME', timeLeft: d, isPaused, roundDuration: d });
+  };
+
+  // Pausar / Continuar
+  const handleTogglePause = () => {
+    setIsPaused((p) => {
+      const next = !p;
+      broadcastSync({ type: 'UPDATE_TIME', timeLeft, isPaused: next });
+      return next;
+    });
+  };
+
+  // Atualizar e Zerar Placar Geral de Vitórias
+  const handleUpdateVictoryScore = (newScore: VictoryScore) => {
+    setVictoryScore(newScore);
+    saveVictoryScore(newScore);
+    broadcastSync({ type: 'UPDATE_VICTORY_SCORE', victoryScore: newScore });
+  };
+
+  const handleResetVictoryScore = () => {
+    const confirmed = window.confirm(
+      'Deseja realmente zerar o placar geral de vitórias da série?'
+    );
+    if (confirmed) {
+      const zero = { left: 0, right: 0 };
+      setVictoryScore(zero);
+      saveVictoryScore(zero);
+      broadcastSync({ type: 'UPDATE_VICTORY_SCORE', victoryScore: zero });
+    }
+  };
+
+  // TikTok LIVE Backend Actions
+  const handleUpdateTikTokUsername = (u: string) => {
+    setTiktokUsername(u);
+    saveTikTokConfig({ ...savedTikTok, username: u });
+  };
+
+  const handleConnectTikTok = async (targetUser: string) => {
+    const clean = targetUser.replace(/^@/, '').trim();
+    if (!clean) return;
+    setTiktokUsername(clean);
+    saveTikTokConfig({ ...savedTikTok, username: clean });
+    try {
+      const res = await fetch('/api/tiktok/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: clean }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTiktokStatus((prev) => ({
+          ...prev,
+          status: 'error',
+          lastError: data.error || 'Erro ao conectar ao TikTok',
+        }));
+      }
+    } catch (err: any) {
+      setTiktokStatus((prev) => ({
+        ...prev,
+        status: 'error',
+        lastError: err?.message || 'Falha de comunicação com o servidor',
+      }));
+    }
+  };
+
+  const handleDisconnectTikTok = async () => {
+    try {
+      await fetch('/api/tiktok/disconnect', { method: 'POST' });
+    } catch (e) {}
+    setTiktokStatus((prev) => ({ ...prev, status: 'disconnected', lastError: '' }));
+  };
+
+  const handleSendTestTikTokEvent = async (type: 'gift' | 'chat', data: any) => {
+    try {
+      await fetch('/api/tiktok/test-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, data }),
+      });
+    } catch (e) {
+      console.error('Falha ao enviar evento de teste da nuvem', e);
+    }
+  };
+
+  // Round Timer Countdown Loop: Atualiza Placar Geral de Vitórias ao Acabar
   useEffect(() => {
     if (isPaused || isRoundOver) return;
 
@@ -411,6 +753,24 @@ export default function App() {
             leftPoints > rightPoints ? 'left' : rightPoints > leftPoints ? 'right' : 'draw';
           setWinner(currentWinner);
           setResetCountdown(streamSettings.autoRestartDelay || 5);
+
+          // ATUALIZA O PLACAR GERAL DE VITÓRIAS (1x0, 2x1, ETC.) GRAVADO NA MEMÓRIA
+          if (currentWinner === 'left') {
+            setVictoryScore((prevScore) => {
+              const next = { ...prevScore, left: prevScore.left + 1 };
+              saveVictoryScore(next);
+              broadcastSync({ type: 'UPDATE_VICTORY_SCORE', victoryScore: next });
+              return next;
+            });
+          } else if (currentWinner === 'right') {
+            setVictoryScore((prevScore) => {
+              const next = { ...prevScore, right: prevScore.right + 1 };
+              saveVictoryScore(next);
+              broadcastSync({ type: 'UPDATE_VICTORY_SCORE', victoryScore: next });
+              return next;
+            });
+          }
+
           return 0;
         }
         return prev - 1;
@@ -428,7 +788,10 @@ export default function App() {
       setResetCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          setRoundNumber((r) => r + 1);
+          const nextR = roundNumber + 1;
+          setRoundNumber(nextR);
+          saveRoundNumber(nextR);
+          broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: nextR });
           handleRestartRound();
           return 5;
         }
@@ -437,7 +800,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isRoundOver, roundDuration]);
+  }, [isRoundOver, roundNumber]);
 
   // Ghost Bot Engine (ONLY RUNS IF BOT IS EXPLICITLY TURNED ON BY STREAMER)
   useEffect(() => {
@@ -465,11 +828,11 @@ export default function App() {
 
       if (isGift) {
         const giftCount = Math.random() < 0.2 ? (Math.random() < 0.5 ? 2 : 5) : 1;
-        const giftName = targetSide === 'left' ? 'Rosa' : 'Sorvete';
-        const giftIcon = targetSide === 'left' ? '🌹' : '🍦';
+        const giftName = targetSide === 'left' ? leftCandidate.primaryGift.name : rightCandidate.primaryGift.name;
+        const giftIcon = targetSide === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon;
         handleVote(targetSide, giftCount, `${giftName} x${giftCount}`, giftIcon, user);
       } else {
-        // Simulated comment adds progress to 5-comment rule
+        // Simulated comment
         if (targetSide === 'left') {
           setLeftCommentProgress((p) => {
             const next = p + 1;
@@ -523,7 +886,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 1. TOP HEADER (ELEIÇÕES 2026 INTERATIVO + TIMER + ROSES + STATUS PILLS - 100% LIMPO) */}
+      {/* 1. TOP HEADER (ELEIÇÕES 2026 INTERATIVO + PLACAR GERAL DE VITÓRIAS + TIMER + ROSES + STATUS PILLS) */}
       <TopHeader
         leftCandidate={leftCandidate}
         rightCandidate={rightCandidate}
@@ -531,11 +894,13 @@ export default function App() {
         rightPoints={rightPoints}
         timeLeft={timeLeft}
         onOpenAdmin={() => setIsPasswordModalOpen(true)}
+        victoryScore={victoryScore}
+        roundNumber={roundNumber}
       />
 
       {/* 2. CENTER SECTION: DUAL COLUMNS (SCOREBOARDS + URNAS + WOODEN DESK) */}
       <main className="w-full max-w-md flex-1 flex flex-row items-center justify-center gap-2 sm:gap-3 px-2 my-auto overflow-hidden">
-        {/* Left Urna Column (22 - Bolsonaro / Blue) */}
+        {/* Left Urna Column */}
         <UrnaMachine
           candidate={leftCandidate}
           points={leftPoints}
@@ -550,7 +915,7 @@ export default function App() {
           lastVoteText={lastLeftText}
         />
 
-        {/* Right Urna Column (13 - Lula / Red) */}
+        {/* Right Urna Column */}
         <UrnaMachine
           candidate={rightCandidate}
           points={rightPoints}
@@ -566,7 +931,7 @@ export default function App() {
         />
       </main>
 
-      {/* 3. BOTTOM SECTION: CLEAN LIVE CHAT & 5-COMMENT RULE PROGRESS (NO ADM DATA ON SCREEN) */}
+      {/* 3. BOTTOM SECTION: CLEAN LIVE CHAT & 5-COMMENT RULE PROGRESS */}
       <BottomLiveFeed
         messages={chatMessages}
         leftCandidate={leftCandidate}
@@ -595,7 +960,7 @@ export default function App() {
         onClose={() => setIsShareLinksOpen(false)}
       />
 
-      {/* Victory Celebration Modal */}
+      {/* Victory Celebration Modal com Placar Geral da Série */}
       {isRoundOver && winner && (
         <VictoryModal
           winner={winner}
@@ -606,6 +971,7 @@ export default function App() {
           roundNumber={roundNumber}
           resetCountdown={resetCountdown}
           onForceNextRound={handleForceNextRound}
+          victoryScore={victoryScore}
         />
       )}
 
@@ -615,30 +981,46 @@ export default function App() {
         onClose={() => setIsAdminOpen(false)}
         leftCandidate={leftCandidate}
         rightCandidate={rightCandidate}
-        onUpdateCandidate={(side, c) => {
-          if (side === 'left') setLeftCandidate(c);
-          else setRightCandidate(c);
-        }}
+        onUpdateCandidate={handleUpdateCandidate}
         onSelectPreset={handleSelectPreset}
         roundDuration={roundDuration}
-        onChangeRoundDuration={(d) => {
-          setRoundDuration(d);
-          setTimeLeft(d);
-        }}
+        onChangeRoundDuration={handleChangeRoundDuration}
         isPaused={isPaused}
-        onTogglePause={() => setIsPaused((p) => !p)}
+        onTogglePause={handleTogglePause}
         onRestartRound={handleRestartRound}
         onInjectVotes={handleInjectVotes}
         onMakeClutch={handleMakeClutch}
         botSettings={botSettings}
-        onUpdateBotSettings={(s) => setBotSettings((prev) => ({ ...prev, ...s }))}
+        onUpdateBotSettings={(s) => {
+          setBotSettings((prev) => {
+            const next = { ...prev, ...s };
+            broadcastSync({ type: 'UPDATE_BOT_SETTINGS', botSettings: next });
+            return next;
+          });
+        }}
         streamSettings={streamSettings}
-        onUpdateStreamSettings={(s) => setStreamSettings((prev) => ({ ...prev, ...s }))}
+        onUpdateStreamSettings={(s) => {
+          setStreamSettings((prev) => {
+            const next = { ...prev, ...s };
+            broadcastSync({ type: 'UPDATE_STREAM_SETTINGS', streamSettings: next });
+            return next;
+          });
+        }}
         musicTrack={musicTrack}
         onChangeMusicTrack={handleMusicChange}
         musicVolume={musicVolumeState}
         onChangeMusicVolume={handleVolumeChange}
         initialTab={adminInitialTab}
+        victoryScore={victoryScore}
+        onUpdateVictoryScore={handleUpdateVictoryScore}
+        onResetVictoryScore={handleResetVictoryScore}
+        tiktokStatus={tiktokStatus}
+        tiktokUsername={tiktokUsername}
+        onChangeTikTokUsername={handleUpdateTikTokUsername}
+        onConnectTikTok={handleConnectTikTok}
+        onDisconnectTikTok={handleDisconnectTikTok}
+        onSendTestTikTokEvent={handleSendTestTikTokEvent}
+        tiktokLogs={tiktokLogs}
       />
     </div>
   );

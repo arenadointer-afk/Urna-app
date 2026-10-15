@@ -30,6 +30,37 @@ export interface PresetDuel {
   right: Candidate;
 }
 
+export interface VictoryScore {
+  left: number;
+  right: number;
+}
+
+export interface TikTokStatus {
+  status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  username: string;
+  viewers: number;
+  totalLikes: number;
+  lastError: string;
+}
+
+export interface TikTokLiveEvent {
+  type: 'chat' | 'gift' | 'like' | 'status';
+  uniqueId?: string;
+  nickname?: string;
+  comment?: string;
+  giftName?: string;
+  repeatCount?: number;
+  diamondCount?: number;
+  giftPictureUrl?: string;
+  giftIcon?: string;
+  likeCount?: number;
+  totalLikes?: number;
+  status?: 'disconnected' | 'connecting' | 'connected' | 'error';
+  username?: string;
+  lastError?: string;
+  timestamp?: number;
+}
+
 export interface GameState {
   roundNumber: number;
   timeLeft: number;
@@ -39,6 +70,7 @@ export interface GameState {
   rightPoints: number;
   leftGiftsCount: number;
   rightGiftsCount: number;
+  victoryScore: VictoryScore;
   isRoundOver: boolean;
   winner: 'left' | 'right' | 'draw' | null;
   resetCountdown: number;
