@@ -1,0 +1,6 @@
+{
+  "name": "Urna TikTok LIVE - Batalha Interativa",
+  "description": "Jogo interativo de urna eletrônica para TikTok LIVE com disputa em tempo real por presentes e comentários, animação de votos, sons autênticos e painel administrativo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

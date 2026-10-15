@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-digital {
+    font-family: 'Chakra Petch', 'Orbitron', monospace;
+  }
+  .font-screen {
+    font-family: 'Courier New', Courier, monospace;
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
+  }
+}
+
+@keyframes pulseGlowBlue {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(59, 130, 246, 0.8), 0 0 10px rgba(255, 255, 255, 0.5);
+  }
+}
+
+.glow-red {
+  animation: pulseGlow 1.8s infinite ease-in-out;
+}
+
+.glow-blue {
+  animation: pulseGlowBlue 1.8s infinite ease-in-out;
+}
+
+/* CRT Scanline effect on Urna screen */
+.urna-screen-scanline {
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.12) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.02),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.02)
+  );
+  background-size: 100% 3px, 6px 100%;
+}
