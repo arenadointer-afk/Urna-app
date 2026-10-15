@@ -41,19 +41,19 @@ export const BottomLiveFeed: React.FC<BottomLiveFeedProps> = ({
 
   return (
     <footer className="w-full max-w-md flex flex-col justify-end px-2 pb-1 pt-0.5 shrink-0 z-20">
-      {/* 1. Explicit Rule Banner: 5 comentários número 22 = 1 ponto | 5 comentários número 13 = 1 ponto */}
-      <div className="w-full mb-1 py-1 px-2 rounded-xl bg-gradient-to-r from-blue-950/90 via-slate-900/95 to-red-950/90 border border-slate-700/80 text-[8px] sm:text-[9px] flex items-center justify-between text-white shadow-md">
+      {/* 1. Explicit Rule Banner: 5 comentários número 13 = 1 ponto | 5 comentários número 22 = 1 ponto */}
+      <div className="w-full mb-1 py-1 px-2 rounded-xl bg-gradient-to-r from-red-950/90 via-slate-900/95 to-blue-950/90 border border-slate-700/80 text-[8px] sm:text-[9px] flex items-center justify-between text-white shadow-md">
         <div className="flex items-center gap-1 font-bold truncate">
           <span className="text-amber-300">📢 REGRAS:</span>
           <span className="truncate">
-            5 comentários número <strong className="text-blue-300">{leftCandidate.number}</strong> = 1 ponto • 5 comentários número <strong className="text-red-300">{rightCandidate.number}</strong> = 1 ponto
+            5 comentários número <strong className="text-red-400">{leftCandidate.number}</strong> = 1 ponto • 5 comentários número <strong className="text-blue-400">{rightCandidate.number}</strong> = 1 ponto
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0 font-digital font-black text-[9px] ml-1">
-          <span className="px-1.5 py-0.2 rounded bg-blue-600 text-white shadow">
+          <span className="px-1.5 py-0.2 rounded bg-red-600 text-white shadow">
             {leftCandidate.number}: {leftCommentProgress}/5
           </span>
-          <span className="px-1.5 py-0.2 rounded bg-red-600 text-white shadow">
+          <span className="px-1.5 py-0.2 rounded bg-blue-600 text-white shadow">
             {rightCandidate.number}: {rightCommentProgress}/5
           </span>
         </div>

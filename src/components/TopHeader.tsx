@@ -63,17 +63,35 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* 2. Timer & Gifts Row (Rosa +1 - Timer 02:05 - Sorvete +1 + AO VIVO) */}
       <div className="w-full max-w-md flex items-center justify-between px-1 my-1">
-        {/* Left: Rose +1 / Voto 22 */}
+        {/* Left: Gift +1 / Voto Left (Ex: Lula 13 Vermelho) */}
         <div className="flex flex-col items-center">
-          <div className="relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border border-blue-500/60 shadow">
+          <div
+            className={`relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border shadow ${
+              leftCandidate.number === '13' || leftCandidate.color.includes('red') || leftCandidate.color.includes('dc2626')
+                ? 'border-red-500/60'
+                : 'border-blue-500/60'
+            }`}
+          >
             <span className="text-2xl sm:text-3xl filter drop-shadow">
               {leftCandidate.primaryGift.icon || '🌹'}
             </span>
-            <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-black font-digital text-[11px] shadow border border-white/80">
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-white font-black font-digital text-[11px] shadow border border-white/80 ${
+                leftCandidate.number === '13' || leftCandidate.color.includes('red') || leftCandidate.color.includes('dc2626')
+                  ? 'bg-red-500'
+                  : 'bg-blue-500'
+              }`}
+            >
               +1
             </span>
           </div>
-          <div className="mt-1 px-2 py-0.5 rounded-md bg-blue-600 text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border border-blue-400 whitespace-nowrap">
+          <div
+            className={`mt-1 px-2 py-0.5 rounded-md text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border whitespace-nowrap ${
+              leftCandidate.number === '13' || leftCandidate.color.includes('red') || leftCandidate.color.includes('dc2626')
+                ? 'bg-red-600 border-red-400'
+                : 'bg-blue-600 border-blue-400'
+            }`}
+          >
             VOTO NO {leftCandidate.number}
           </div>
         </div>
@@ -91,27 +109,45 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </div>
         </div>
 
-        {/* Right: Sorvete +1 / Voto 13 + AO VIVO badge */}
+        {/* Right: Gift +1 / Voto Right (Ex: Flávio Bolsonaro 22 Azul) + AO VIVO badge */}
         <div className="flex flex-col items-center relative">
           {/* AO VIVO pill badge */}
           <div className="absolute -top-2.5 -right-1 z-20 px-1.5 py-0.2 rounded-full bg-red-600 text-white font-black text-[7.5px] uppercase tracking-wider animate-pulse shadow">
             AO VIVO
           </div>
-          <div className="relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border border-red-500/60 shadow">
+          <div
+            className={`relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border shadow ${
+              rightCandidate.number === '22' || rightCandidate.color.includes('blue') || rightCandidate.color.includes('2563eb')
+                ? 'border-blue-500/60'
+                : 'border-red-500/60'
+            }`}
+          >
             <span className="text-2xl sm:text-3xl filter drop-shadow">
               {rightCandidate.primaryGift.icon || '🍦'}
             </span>
-            <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white font-black font-digital text-[11px] shadow border border-white/80">
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-white font-black font-digital text-[11px] shadow border border-white/80 ${
+                rightCandidate.number === '22' || rightCandidate.color.includes('blue') || rightCandidate.color.includes('2563eb')
+                  ? 'bg-blue-500'
+                  : 'bg-red-500'
+              }`}
+            >
               +1
             </span>
           </div>
-          <div className="mt-1 px-2 py-0.5 rounded-md bg-red-600 text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border border-red-400 whitespace-nowrap">
+          <div
+            className={`mt-1 px-2 py-0.5 rounded-md text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border whitespace-nowrap ${
+              rightCandidate.number === '22' || rightCandidate.color.includes('blue') || rightCandidate.color.includes('2563eb')
+                ? 'bg-blue-600 border-blue-400'
+                : 'bg-red-600 border-red-400'
+            }`}
+          >
             VOTO NO {rightCandidate.number}
           </div>
         </div>
       </div>
 
-      {/* 3. Status Bar: TOTAL 145 | DIFERENÇA 33 | 13 NA FRENTE */}
+      {/* 3. Status Bar: TOTAL | DIFERENÇA | LÍDER */}
       <div className="w-full max-w-md grid grid-cols-3 gap-1.5 px-1 my-1">
         {/* TOTAL */}
         <div className="py-1 px-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-center flex flex-col justify-center">
@@ -135,12 +171,16 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* LEADER BADGE */}
         <div
-          className={`py-1 px-1.5 rounded-xl text-center flex flex-col justify-center shadow-lg transition-all ${
+          className={`py-1 px-1.5 rounded-xl text-center flex flex-col justify-center shadow-lg transition-all text-white font-black uppercase ${
             leader === 'left'
-              ? 'bg-blue-600 border border-blue-400 text-white animate-pulse'
+              ? (leftCandidate.number === '13' || leftCandidate.color.includes('red')
+                  ? 'bg-red-600 border border-red-400 animate-pulse'
+                  : 'bg-blue-600 border border-blue-400 animate-pulse')
               : leader === 'right'
-              ? 'bg-red-600 border border-red-400 text-white animate-pulse'
-              : 'bg-amber-600 border border-amber-400 text-white'
+              ? (rightCandidate.number === '22' || rightCandidate.color.includes('blue')
+                  ? 'bg-blue-600 border border-blue-400 animate-pulse'
+                  : 'bg-red-600 border border-red-400 animate-pulse')
+              : 'bg-amber-600 border border-amber-400'
           }`}
         >
           <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-tight truncate leading-tight">

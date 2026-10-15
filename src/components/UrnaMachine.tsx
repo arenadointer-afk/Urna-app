@@ -33,15 +33,15 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [isPressingHand, setIsPressingHand] = useState(false);
   const [handKey, setHandKey] = useState<string | null>(null);
-  // Default to showing candidate digits when idle
-  const [typedDigits, setTypedDigits] = useState<string[]>(candidate.number.split('').slice(0, 2));
+  // Default to BLANK white screen with logo in idle (only shows photo/name when digits are typed!)
+  const [typedDigits, setTypedDigits] = useState<string[]>(['', '']);
   const [isConfirmFlashing, setIsConfirmFlashing] = useState(false);
   const [showFimScreen, setShowFimScreen] = useState(false);
   const [lastConfirmedPoints, setLastConfirmedPoints] = useState(1);
 
-  // Sync typed digits when candidate changes
+  // When candidate changes, keep screen in clean waiting state
   useEffect(() => {
-    setTypedDigits(candidate.number.split('').slice(0, 2));
+    setTypedDigits(['', '']);
   }, [candidate.number]);
 
   // Trigger vote sequence with animated finger & TSE audio
@@ -57,18 +57,18 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
     setShowFimScreen(false);
     setLastConfirmedPoints(pointsAmount);
 
-    // Step 0: Blank screen momentarily with blinking cursor to simulate typing
+    // Step 0: Ensure blank screen at start
     setTypedDigits(['', '']);
 
     setTimeout(() => {
-      // Step 1: Finger presses first digit
+      // Step 1: Finger presses first digit (e.g. '1' or '2')
       setTypedDigits([digits[0] || '1', '']);
       setHandKey(digits[0] || '1');
       setActiveKey(digits[0] || '1');
       playKeyBeep();
 
       setTimeout(() => {
-        // Step 2: Finger presses second digit -> Candidate Photo & Name illuminate on white screen!
+        // Step 2: Finger presses second digit -> Candidate Photo & Name reveal on white screen!
         setTypedDigits([digits[0] || '1', digits[1] || '2']);
         setHandKey(digits[1] || '2');
         setActiveKey(digits[1] || '2');
@@ -88,14 +88,14 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
             setActiveKey(null);
             setIsConfirmFlashing(false);
 
-            // After 2.2 seconds of FIM screen, return to normal display
+            // After 2.2 seconds of FIM screen, return to clean white waiting screen
             setTimeout(() => {
               setShowFimScreen(false);
-              setTypedDigits(candidate.number.split('').slice(0, 2));
+              setTypedDigits(['', '']);
             }, 2200);
           }, 350);
-        }, 220);
-      }, 220);
+        }, 260);
+      }, 260);
     }, 120);
   };
 
@@ -107,16 +107,22 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   ];
 
   const formattedPercentage = percentage.toFixed(1).replace('.', ',');
-  const hasFullDigits = Boolean(typedDigits[1]);
+  // Name and photo appear ONLY when the 2 digits have been typed!
+  const hasFullDigits = Boolean(typedDigits[0] && typedDigits[1]);
+  const isRedTheme =
+    candidate.number === '13' ||
+    candidate.party === 'PT' ||
+    candidate.color?.includes('red') ||
+    candidate.color?.includes('dc2626');
 
   return (
     <div className="flex-1 flex flex-col items-center min-w-0 max-w-[215px] sm:max-w-[250px]">
       {/* 1. TOP SCORE CARD WITH CANDIDATE PHOTO & NAME */}
       <div
         className={`w-full rounded-2xl p-1.5 sm:p-2 flex flex-col justify-between bg-slate-950/95 border shadow-xl relative transition-all ${
-          candidate.id === 'left'
-            ? 'border-blue-500/70 border-t-4 border-t-blue-500 shadow-blue-500/20'
-            : 'border-red-500/70 border-t-4 border-t-red-500 shadow-red-500/20'
+          isRedTheme
+            ? 'border-red-500/70 border-t-4 border-t-red-500 shadow-red-500/20'
+            : 'border-blue-500/70 border-t-4 border-t-blue-500 shadow-blue-500/20'
         }`}
       >
         {/* Candidate Header: Photo, Name & Number Nítidos */}
@@ -125,7 +131,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
             {/* Foto Nítida do Candidato */}
             <div
               className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 overflow-hidden shrink-0 shadow bg-zinc-800 ${
-                candidate.id === 'left' ? 'border-blue-400' : 'border-red-400'
+                isRedTheme ? 'border-red-400' : 'border-blue-400'
               }`}
             >
               <img
@@ -182,9 +188,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
           </span>
           <span
             className={`font-black font-digital px-1 py-0.2 rounded shrink-0 ml-1 shadow ${
-              candidate.id === 'left'
-                ? 'bg-blue-600 text-white'
-                : 'bg-red-600 text-white'
+              isRedTheme ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
             }`}
           >
             {commentCount}/5
@@ -222,7 +226,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                 </span>
                 <span
                   className={`text-[8.5px] sm:text-[9.5px] font-black uppercase mt-1 px-1.5 py-0.2 rounded-full ${
-                    candidate.id === 'left' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'
+                    isRedTheme ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
                   }`}
                 >
                   +{lastConfirmedPoints} PONTO COMPUTADO!
@@ -275,7 +279,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                       </div>
                     </div>
 
-                    {/* Conforme digita, aparecem nome e foto */}
+                    {/* Conforme digita os 2 números, aparecem o Nome, Partido e Vice */}
                     {hasFullDigits ? (
                       <div className="mt-0.5 pt-0.5 border-t border-zinc-200 leading-tight space-y-0.2 animate-fade-in">
                         <div className="text-[6.5px] sm:text-[7px] font-black text-zinc-950 uppercase truncate">
@@ -295,7 +299,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                     )}
                   </div>
 
-                  {/* Foto Oficial na Tela Branca da Urna */}
+                  {/* Foto Oficial na Tela Branca da Urna: SÓ APARECE QUANDO DIGITAR O NÚMERO */}
                   <div className="w-9 h-11 sm:w-10 sm:h-12 rounded border-2 border-zinc-800 overflow-hidden bg-zinc-100 shrink-0 shadow flex items-center justify-center relative mt-0.5">
                     {hasFullDigits ? (
                       <img
@@ -315,9 +319,15 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                   </div>
                 </div>
 
-                {/* Bottom Notice */}
+                {/* Bottom Notice: Piscando quando digita para apertar verde */}
                 <div className="text-[5px] text-zinc-400 border-t border-zinc-200 pt-0.5 uppercase tracking-tighter">
-                  Aperte a tecla: <strong className="text-emerald-700">VERDE</strong> para CONFIRMAR
+                  {hasFullDigits ? (
+                    <span className="text-emerald-700 font-bold animate-pulse">
+                      Aperte: <strong>VERDE</strong> para CONFIRMAR
+                    </span>
+                  ) : (
+                    <span>Digite o número na urna</span>
+                  )}
                 </div>
               </div>
             )}
@@ -341,8 +351,15 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                         playKeyBeep();
                         setActiveKey(keyVal);
                         setTimeout(() => setActiveKey(null), 120);
+                        if (!typedDigits[0]) {
+                          setTypedDigits([keyVal, '']);
+                        } else if (!typedDigits[1]) {
+                          setTypedDigits([typedDigits[0], keyVal]);
+                        } else {
+                          setTypedDigits([keyVal, '']);
+                        }
                       }}
-                      className={`h-3.5 sm:h-4.5 rounded bg-gradient-to-b from-zinc-600 to-zinc-800 text-white font-black text-[7.5px] sm:text-[9px] flex items-center justify-center border border-zinc-500 shadow active:scale-90 ${
+                      className={`h-3.5 sm:h-4.5 rounded bg-gradient-to-b from-zinc-600 to-zinc-800 text-white font-black text-[7.5px] sm:text-[9px] flex items-center justify-center border border-zinc-500 shadow active:scale-90 cursor-pointer ${
                         isCurrentActive ? 'bg-amber-400 text-zinc-950 ring-1 ring-amber-300' : ''
                       }`}
                     >
@@ -357,8 +374,11 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
             <div className="grid grid-cols-3 gap-0.5 pt-0.5 border-t border-zinc-800">
               <button
                 type="button"
-                onClick={() => playKeyBeep()}
-                className="h-4 sm:h-5 rounded bg-white text-zinc-900 font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow"
+                onClick={() => {
+                  playKeyBeep();
+                  setTypedDigits(['', '']);
+                }}
+                className="h-4 sm:h-5 rounded bg-white text-zinc-900 font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95"
               >
                 Branco
               </button>
@@ -367,19 +387,32 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                 onClick={() => {
                   playKeyBeep();
                   setTypedDigits(['', '']);
-                  setTimeout(() => setTypedDigits(candidate.number.split('').slice(0, 2)), 1200);
                 }}
-                className="h-4 sm:h-5 rounded bg-amber-600 text-white font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow"
+                className="h-4 sm:h-5 rounded bg-amber-600 text-white font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95"
               >
                 Corrige
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  triggerVoteSequence(candidate.number, 1);
-                  onVote(candidate.id, 1, 'Manual', '🟢');
+                  if (typedDigits[0] && typedDigits[1]) {
+                    setIsConfirmFlashing(true);
+                    setShowFimScreen(true);
+                    playUrnaConfirmSound();
+                    onVote(candidate.id, 1, 'Urna Manual', '🗳️');
+                    setTimeout(() => {
+                      setIsConfirmFlashing(false);
+                      setTimeout(() => {
+                        setShowFimScreen(false);
+                        setTypedDigits(['', '']);
+                      }, 2200);
+                    }, 350);
+                  } else {
+                    triggerVoteSequence(candidate.number, 1);
+                    onVote(candidate.id, 1, 'Urna Manual', '🗳️');
+                  }
                 }}
-                className={`h-4 sm:h-5 rounded bg-emerald-600 text-white font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow ${
+                className={`h-4 sm:h-5 rounded bg-emerald-600 text-white font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
                   isConfirmFlashing || activeKey === 'CONFIRMA'
                     ? 'ring-2 ring-emerald-300 brightness-150 scale-95'
                     : ''
@@ -405,7 +438,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
       {/* 5. TABELA DE PRESENTES BEM EVIDENTE ABAIXO DA URNA (INTERATIVOS & DESTAQUE MÁXIMO) */}
       <div
         className={`w-full mt-1.5 p-1 sm:p-1.5 rounded-2xl bg-slate-950/95 border-2 shadow-2xl flex flex-col gap-1 transition-all ${
-          candidate.id === 'left' ? 'border-blue-500/80' : 'border-red-500/80'
+          isRedTheme ? 'border-red-500/80' : 'border-blue-500/80'
         }`}
       >
         <div className="flex items-center justify-between text-[7.5px] sm:text-[8px] font-black uppercase px-0.5 text-slate-300">
@@ -413,83 +446,87 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
           <span className="text-[6.5px] text-slate-400">TOQUE P/ VOTAR</span>
         </div>
 
-        {/* Grid de presentes com +1 ao lado da rosa e +1 ao lado do sorvete */}
+        {/* Grid de presentes: Presente 1 (+1) ao lado da rosa/sorvete, Presente 2 (+10), Presente 3 (+100) */}
         <div className="grid grid-cols-3 gap-1 text-center">
           {/* Presente 1: Rosa ou Sorvete (+1 PONTO) */}
           <button
             type="button"
             onClick={() => {
-              const icon = candidate.id === 'left' ? '🌹' : '🍦';
-              const name = candidate.id === 'left' ? 'Rosa' : 'Sorvete';
-              triggerVoteSequence(candidate.number, 1);
-              onVote(candidate.id, 1, name, icon);
+              const gift = candidate.primaryGift;
+              triggerVoteSequence(candidate.number, gift.points || 1);
+              onVote(candidate.id, gift.points || 1, gift.name, gift.icon);
             }}
             className="group p-1 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-amber-400 flex flex-col items-center justify-between transition-all active:scale-95 shadow cursor-pointer"
           >
             <div className="flex items-center justify-center gap-0.5">
               <span className="text-lg sm:text-xl filter drop-shadow">
-                {candidate.id === 'left' ? '🌹' : '🍦'}
+                {candidate.primaryGift.icon || (isRedTheme ? '🌹' : '🍦')}
               </span>
               <span className="px-1 py-0.2 rounded-full bg-amber-400 text-zinc-950 font-black font-digital text-[9px] shadow">
                 +1
               </span>
             </div>
             <span className="text-[7.5px] sm:text-[8px] text-slate-300 font-extrabold truncate mt-0.5">
-              {candidate.id === 'left' ? 'Rosa' : 'Sorvete'}
+              {candidate.primaryGift.name || (isRedTheme ? 'Rosa' : 'Sorvete')}
             </span>
             <span className="text-[8px] sm:text-[8.5px] font-black text-amber-300 font-digital leading-none">
               +1 PONTO
             </span>
           </button>
 
-          {/* Presente 2: Donut ou Coração (+10 PONTOS) */}
+          {/* Presente 2: Coração ou Donut (+10 PONTOS) */}
           <button
             type="button"
             onClick={() => {
-              const icon = candidate.id === 'left' ? '🍩' : '💖';
-              const name = candidate.id === 'left' ? 'Donut' : 'Coração';
-              triggerVoteSequence(candidate.number, 10);
-              onVote(candidate.id, 10, name, icon);
+              const gift = candidate.bonusGifts?.[0] || { name: 'Combo', icon: '🍩', points: 10 };
+              triggerVoteSequence(candidate.number, gift.points || 10);
+              onVote(candidate.id, gift.points || 10, gift.name, gift.icon);
             }}
             className="group p-1 rounded-xl bg-slate-900 border border-emerald-500/60 hover:border-emerald-400 flex flex-col items-center justify-between transition-all active:scale-95 shadow cursor-pointer"
           >
             <div className="flex items-center justify-center gap-0.5">
               <span className="text-lg sm:text-xl filter drop-shadow">
-                {candidate.id === 'left' ? '🍩' : '💖'}
+                {candidate.bonusGifts?.[0]?.icon || (isRedTheme ? '💖' : '🍩')}
               </span>
               <span className="px-1 py-0.2 rounded-full bg-emerald-500 text-white font-black font-digital text-[8.5px] shadow">
                 +10
               </span>
             </div>
             <span className="text-[7.5px] sm:text-[8px] text-emerald-300 font-extrabold truncate mt-0.5">
-              {candidate.id === 'left' ? 'Donut' : 'Coração'}
+              {candidate.bonusGifts?.[0]?.name || (isRedTheme ? 'Coração' : 'Donut')}
             </span>
             <span className="text-[8px] sm:text-[8.5px] font-black text-emerald-400 font-digital leading-none">
               +10 PONTOS
             </span>
           </button>
 
-          {/* Presente 3: Leão ou Galáxia (+100 PONTOS MEGA) */}
+          {/* Presente 3: Galáxia ou Leão (+100 PONTOS MEGA) */}
           <button
             type="button"
             onClick={() => {
-              const icon = candidate.id === 'left' ? '🦁' : '🌌';
-              const name = candidate.id === 'left' ? 'Leão' : 'Galáxia';
-              triggerVoteSequence(candidate.number, 100);
-              onVote(candidate.id, 100, name, icon);
+              const gift =
+                candidate.bonusGifts?.[2] ||
+                candidate.bonusGifts?.[1] ||
+                { name: 'Mega Bônus', icon: isRedTheme ? '🌌' : '🦁', points: 100 };
+              triggerVoteSequence(candidate.number, gift.points || 100);
+              onVote(candidate.id, gift.points || 100, gift.name, gift.icon);
             }}
             className="group p-1 rounded-xl bg-gradient-to-b from-amber-950/60 to-slate-900 border-2 border-amber-400/90 hover:border-yellow-300 flex flex-col items-center justify-between transition-all active:scale-95 shadow-md shadow-amber-500/30 cursor-pointer animate-pulse"
           >
             <div className="flex items-center justify-center gap-0.5">
               <span className="text-lg sm:text-xl filter drop-shadow">
-                {candidate.id === 'left' ? '🦁' : '🌌'}
+                {candidate.bonusGifts?.[2]?.icon ||
+                  candidate.bonusGifts?.[1]?.icon ||
+                  (isRedTheme ? '🌌' : '🦁')}
               </span>
               <span className="px-1 py-0.2 rounded-full bg-yellow-400 text-zinc-950 font-black font-digital text-[8px] shadow">
                 +100
               </span>
             </div>
             <span className="text-[7.5px] sm:text-[8px] text-yellow-300 font-black truncate mt-0.5">
-              {candidate.id === 'left' ? 'Leão' : 'Galáxia'}
+              {candidate.bonusGifts?.[2]?.name ||
+                candidate.bonusGifts?.[1]?.name ||
+                (isRedTheme ? 'Galáxia' : 'Leão')}
             </span>
             <span className="text-[8px] sm:text-[8.5px] font-black text-yellow-300 font-digital leading-none">
               +100 PONTOS
