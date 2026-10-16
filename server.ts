@@ -29,6 +29,8 @@ const STATE_FILE = path.resolve(__dirname, 'server_state.json');
 let firestoreDb: any = null;
 let isFirestoreAdmin = false;
 let isFirestoreQuotaExceeded = false;
+let isFirestorePermissionDenied = false;
+let lastPermissionWarningTime = 0;
 
 function isQuotaError(err: any): boolean {
   const msg = err?.message || String(err);
@@ -37,6 +39,16 @@ function isQuotaError(err: any): boolean {
     msg.includes('Quota limit exceeded') ||
     msg.includes('quota metric') ||
     msg.includes('8 RESOURCE_EXHAUSTED')
+  );
+}
+
+function isPermissionError(err: any): boolean {
+  const msg = err?.message || String(err);
+  return (
+    msg.includes('PERMISSION_DENIED') ||
+    msg.includes('permission-denied') ||
+    msg.includes('Missing or insufficient permissions') ||
+    msg.includes('Code: 7')
   );
 }
 
@@ -102,21 +114,25 @@ async function fetchCloudGameState(): Promise<any> {
     } else {
       const docRef = doc(firestoreDb, 'game_state', 'current');
       const snap = await getDoc(docRef);
+      isFirestorePermissionDenied = false;
       return snap.exists() ? snap.data() : null;
     }
   } catch (e: any) {
-    const msg = e?.message || String(e);
-    if (msg.includes('permission-denied') || msg.includes('Missing or insufficient permissions')) {
-      console.warn('[Server] Firestore: Permissão negada. As regras do Firestore no Console do Firebase precisam de "allow read, write: if true;".');
+    if (isPermissionError(e)) {
+      isFirestorePermissionDenied = true;
+      if (Date.now() - lastPermissionWarningTime > 60000) {
+        lastPermissionWarningTime = Date.now();
+        console.warn('[Server] Firestore: Permissão negada no Firebase Console (PERMISSION_DENIED). O jogo funciona 100% no modo local/SSE. Para habilitar nuvem, publique "allow read, write: if true;" em console.firebase.google.com.');
+      }
     } else {
-      console.warn('[Server] Falha ao consultar game_state do Firestore:', msg);
+      console.warn('[Server] Falha ao consultar game_state do Firestore:', e?.message || e);
     }
     return null;
   }
 }
 
 async function writeCloudGameState(state: any) {
-  if (!firestoreDb || isFirestoreQuotaExceeded) return;
+  if (!firestoreDb || isFirestoreQuotaExceeded || isFirestorePermissionDenied) return;
   try {
     const clean = { ...state, updatedAt: Date.now() };
     if (isFirestoreAdmin) {
@@ -129,6 +145,12 @@ async function writeCloudGameState(state: any) {
     if (isQuotaError(err)) {
       isFirestoreQuotaExceeded = true;
       console.warn('[Server] Quota de gravação do Firestore excedida.');
+    } else if (isPermissionError(err)) {
+      isFirestorePermissionDenied = true;
+      if (Date.now() - lastPermissionWarningTime > 60000) {
+        lastPermissionWarningTime = Date.now();
+        console.warn('[Server] Firestore: Permissão negada no Firebase Console (PERMISSION_DENIED). Operando com armazenamento local e SSE (100% estável).');
+      }
     } else {
       console.warn('[Server] Falha ao gravar game_state no Firestore:', err?.message || err);
     }
@@ -136,7 +158,7 @@ async function writeCloudGameState(state: any) {
 }
 
 async function writeCloudLiveEvent(event: any) {
-  if (!firestoreDb || isFirestoreQuotaExceeded) return;
+  if (!firestoreDb || isFirestoreQuotaExceeded || isFirestorePermissionDenied) return;
   try {
     if (isFirestoreAdmin) {
       await firestoreDb.collection('live_events').doc(event.id).set(event);
@@ -146,11 +168,12 @@ async function writeCloudLiveEvent(event: any) {
     }
   } catch (err: any) {
     if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+    if (isPermissionError(err)) isFirestorePermissionDenied = true;
   }
 }
 
 async function writeCloudChatMessage(msg: any) {
-  if (!firestoreDb || isFirestoreQuotaExceeded) return;
+  if (!firestoreDb || isFirestoreQuotaExceeded || isFirestorePermissionDenied) return;
   try {
     if (isFirestoreAdmin) {
       await firestoreDb.collection('chat_messages').doc(msg.id).set(msg);
@@ -160,6 +183,7 @@ async function writeCloudChatMessage(msg: any) {
     }
   } catch (err: any) {
     if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+    if (isPermissionError(err)) isFirestorePermissionDenied = true;
   }
 }
 
@@ -797,6 +821,19 @@ app.post('/api/state/restore', (req: Request, res: Response) => {
     console.log('[Server] Estado restaurado e atualizado via cliente ativo!');
   }
   res.json({ success: true, state: serverState });
+});
+
+// 9.3 Recheck Firebase Connection and Rules Status
+app.post('/api/firebase/recheck', async (_req: Request, res: Response) => {
+  isFirestorePermissionDenied = false;
+  isFirestoreQuotaExceeded = false;
+  const cloudData = await fetchCloudGameState();
+  res.json({
+    connected: !isFirestorePermissionDenied && Boolean(firestoreDb),
+    isPermissionDenied: isFirestorePermissionDenied,
+    isQuotaExceeded: isFirestoreQuotaExceeded,
+    hasData: Boolean(cloudData),
+  });
 });
 
 // 10. Chat Trigger
