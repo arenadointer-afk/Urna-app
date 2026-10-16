@@ -1,4 +1,5 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { createRequire } from 'module';
 import path from 'path';
@@ -40,6 +41,9 @@ try {
   const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
     const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (process.env.FIREBASE_API_KEY) {
+      rawConfig.apiKey = process.env.FIREBASE_API_KEY;
+    }
     const fbApp = !getApps().length ? initializeApp(rawConfig) : getApps()[0];
     firestoreDb = getFirestore(fbApp, rawConfig.firestoreDatabaseId);
     console.log('[Server] Firebase Firestore conectado com sucesso!');
@@ -49,7 +53,7 @@ try {
 }
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = '0.0.0.0';
 
 app.use(express.json({ limit: '10mb' }));
@@ -1055,6 +1059,15 @@ async function startServer() {
         connectToTikTok(currentUsername).catch(() => {});
       }
     }, 30000);
+
+    // Auto keep-alive para Render.com (impede a instância gratuita de dormir)
+    if (process.env.RENDER_EXTERNAL_URL) {
+      const renderUrl = process.env.RENDER_EXTERNAL_URL;
+      console.log(`[Render] Auto keep-alive ativado para ${renderUrl}`);
+      setInterval(() => {
+        fetch(`${renderUrl}/api/state`).catch(() => {});
+      }, 8 * 60 * 1000);
+    }
   });
 
   const cleanup = () => {

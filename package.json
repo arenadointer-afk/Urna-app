@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "node server.ts",
+    "start": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
+    "bridge": "node tiktok-bridge.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "tiktok-live-connector": "^2.5.0",
+    "tsx": "^4.21.0",
     "vite": "^8.3.0"
   },
   "devDependencies": {
@@ -35,7 +37,6 @@
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.21.0",
     "typescript": "^7.0.2"
   }
 }
