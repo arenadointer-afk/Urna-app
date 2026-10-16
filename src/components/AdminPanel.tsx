@@ -55,6 +55,7 @@ interface AdminPanelProps {
   onSelectPreset: (preset: PresetDuel) => void;
   roundDuration: number;
   onChangeRoundDuration: (duration: number) => void;
+  onAddTime?: (seconds: number) => void;
   isPaused: boolean;
   onTogglePause: () => void;
   onRestartRound: () => void;
@@ -149,6 +150,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onSelectPreset,
   roundDuration,
   onChangeRoundDuration,
+  onAddTime,
   isPaused,
   onTogglePause,
   onRestartRound,
@@ -230,10 +232,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        handleCandidateFieldChange('photoUrl', dataUrl);
-      }
+      const rawDataUrl = event.target?.result as string;
+      if (!rawDataUrl) return;
+
+      // Compress and resize image to 350x350 max so it saves instantly in localStorage & network
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 350;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          handleCandidateFieldChange('photoUrl', compressedDataUrl);
+        } else {
+          handleCandidateFieldChange('photoUrl', rawDataUrl);
+        }
+      };
+      img.onerror = () => {
+        handleCandidateFieldChange('photoUrl', rawDataUrl);
+      };
+      img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };
@@ -1170,6 +1206,35 @@ tiktokLiveConnection.on('gift', data => {
                   <RotateCcw className="w-4 h-4" />
                   <span>REINICIAR RODADA ATUAL</span>
                 </button>
+              </div>
+
+              {/* Botões Rápidos para AUMENTAR TEMPO no Cronômetro em Andamento */}
+              <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-500/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                    <span>⚡</span>
+                    <span>AUMENTAR TEMPO AGORA (Durante a Rodada):</span>
+                  </label>
+                  <span className="text-[10px] text-amber-400/80 font-bold">Adiciona no relógio na hora</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: '+15s', sec: 15 },
+                    { label: '+30s', sec: 30 },
+                    { label: '+60s (1m)', sec: 60 },
+                    { label: '+120s (2m)', sec: 120 },
+                  ].map((btn) => (
+                    <button
+                      key={btn.sec}
+                      type="button"
+                      onClick={() => onAddTime && onAddTime(btn.sec)}
+                      className="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs shadow-md shadow-amber-950/40 flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                      <span>{btn.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Duração da Rodada: Presets Rápidos */}

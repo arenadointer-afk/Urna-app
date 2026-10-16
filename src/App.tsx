@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Candidate,
   ChatMessage,
@@ -26,26 +26,46 @@ import {
   playVoteSound,
   MusicTrackType,
 } from './utils/audio';
+import {
+  getSavedCandidate,
+  saveCandidate,
+  getSavedRoundDuration,
+  saveRoundDuration,
+  getSavedTimeLeft,
+  saveTimeLeft,
+  getSavedIsPaused,
+  saveIsPaused,
+  getSavedVictoryScore,
+  saveVictoryScore,
+  getSavedPoints,
+  savePoints,
+  getSavedRoundNumber,
+  saveRoundNumber,
+  getSavedTikTokConfig,
+  saveTikTokConfig,
+  broadcastSync,
+  subscribeToSync,
+} from './utils/syncStorage';
 
 export default function App() {
-  // Preset & Candidates (Centralizados no Servidor)
-  const [leftCandidate, setLeftCandidate] = useState<Candidate>(PRESET_DUELS[0].left);
-  const [rightCandidate, setRightCandidate] = useState<Candidate>(PRESET_DUELS[0].right);
+  // Preset & Candidates (Local-First + Server-Sync: Persistem com foto e nome no F5)
+  const [leftCandidate, setLeftCandidate] = useState<Candidate>(() => getSavedCandidate('left'));
+  const [rightCandidate, setRightCandidate] = useState<Candidate>(() => getSavedCandidate('right'));
 
-  // Game & Round State (Centralizados no Servidor)
-  const [roundNumber, setRoundNumber] = useState<number>(1);
-  const [roundDuration, setRoundDuration] = useState<number>(125);
-  const [timeLeft, setTimeLeft] = useState<number>(125);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
+  // Game & Round State (Relógio nunca para; sincroniza com servidor ou roda autônomo)
+  const [roundNumber, setRoundNumber] = useState<number>(() => getSavedRoundNumber(1));
+  const [roundDuration, setRoundDuration] = useState<number>(() => getSavedRoundDuration(125));
+  const [timeLeft, setTimeLeft] = useState<number>(() => getSavedTimeLeft(125));
+  const [isPaused, setIsPaused] = useState<boolean>(() => getSavedIsPaused(false));
 
-  // Placar Geral de Vitórias (Série - Gravado e Persistente no Servidor)
-  const [victoryScore, setVictoryScore] = useState<VictoryScore>({ left: 0, right: 0 });
+  // Placar Geral de Vitórias (Série - Gravado e Persistente no F5)
+  const [victoryScore, setVictoryScore] = useState<VictoryScore>(() => getSavedVictoryScore());
 
-  // Points (Centralizados no Servidor - Não zeram ao atualizar a página)
-  const [leftPoints, setLeftPoints] = useState<number>(0);
-  const [rightPoints, setRightPoints] = useState<number>(0);
-  const [leftGiftsCount, setLeftGiftsCount] = useState<number>(0);
-  const [rightGiftsCount, setRightGiftsCount] = useState<number>(0);
+  // Points (Persistem e não zeram no F5)
+  const [leftPoints, setLeftPoints] = useState<number>(() => getSavedPoints().leftPoints);
+  const [rightPoints, setRightPoints] = useState<number>(() => getSavedPoints().rightPoints);
+  const [leftGiftsCount, setLeftGiftsCount] = useState<number>(() => getSavedPoints().leftGifts);
+  const [rightGiftsCount, setRightGiftsCount] = useState<number>(() => getSavedPoints().rightGifts);
 
   // 5-comment rule progress
   const [leftCommentProgress, setLeftCommentProgress] = useState<number>(0);
@@ -141,22 +161,53 @@ export default function App() {
     }, 2800);
   }, []);
 
-  // Sincroniza estado vindo do servidor
+  const lastServerTickRef = useRef<number>(0);
+
+  // Sincroniza estado vindo do servidor e grava no disco / localStorage
   const applyServerState = useCallback((state: any) => {
     if (!state) return;
-    if (state.leftCandidate) setLeftCandidate(state.leftCandidate);
-    if (state.rightCandidate) setRightCandidate(state.rightCandidate);
-    if (typeof state.roundNumber === 'number') setRoundNumber(state.roundNumber);
-    if (typeof state.roundDuration === 'number') setRoundDuration(state.roundDuration);
-    if (typeof state.timeLeft === 'number') setTimeLeft(state.timeLeft);
-    if (typeof state.isPaused === 'boolean') setIsPaused(state.isPaused);
+    if (state.leftCandidate) {
+      setLeftCandidate(state.leftCandidate);
+      saveCandidate('left', state.leftCandidate);
+    }
+    if (state.rightCandidate) {
+      setRightCandidate(state.rightCandidate);
+      saveCandidate('right', state.rightCandidate);
+    }
+    if (typeof state.roundNumber === 'number') {
+      setRoundNumber(state.roundNumber);
+      saveRoundNumber(state.roundNumber);
+    }
+    if (typeof state.roundDuration === 'number') {
+      setRoundDuration(state.roundDuration);
+      saveRoundDuration(state.roundDuration);
+    }
+    if (typeof state.timeLeft === 'number') {
+      setTimeLeft(state.timeLeft);
+      saveTimeLeft(state.timeLeft);
+    }
+    if (typeof state.isPaused === 'boolean') {
+      setIsPaused(state.isPaused);
+      saveIsPaused(state.isPaused);
+    }
     if (typeof state.leftPoints === 'number') setLeftPoints(state.leftPoints);
     if (typeof state.rightPoints === 'number') setRightPoints(state.rightPoints);
     if (typeof state.leftGiftsCount === 'number') setLeftGiftsCount(state.leftGiftsCount);
     if (typeof state.rightGiftsCount === 'number') setRightGiftsCount(state.rightGiftsCount);
+    if (typeof state.leftPoints === 'number' && typeof state.rightPoints === 'number') {
+      savePoints({
+        leftPoints: state.leftPoints,
+        rightPoints: state.rightPoints,
+        leftGifts: state.leftGiftsCount || 0,
+        rightGifts: state.rightGiftsCount || 0,
+      });
+    }
     if (typeof state.leftCommentProgress === 'number') setLeftCommentProgress(state.leftCommentProgress);
     if (typeof state.rightCommentProgress === 'number') setRightCommentProgress(state.rightCommentProgress);
-    if (state.victoryScore) setVictoryScore(state.victoryScore);
+    if (state.victoryScore) {
+      setVictoryScore(state.victoryScore);
+      saveVictoryScore(state.victoryScore);
+    }
     if (state.lastLeftUser) setLastLeftUser(state.lastLeftUser);
     if (state.lastLeftText) setLastLeftText(state.lastLeftText);
     if (state.lastRightUser) setLastRightUser(state.lastRightUser);
@@ -165,22 +216,146 @@ export default function App() {
     if (state.winner !== undefined) setWinner(state.winner);
     if (typeof state.resetCountdown === 'number') setResetCountdown(state.resetCountdown);
     if (Array.isArray(state.chatMessages)) setChatMessages(state.chatMessages);
-    if (state.tiktokUsername) setTiktokUsername(state.tiktokUsername);
+    if (state.tiktokUsername) {
+      setTiktokUsername(state.tiktokUsername);
+      saveTikTokConfig({ username: state.tiktokUsername, autoConnect: true });
+    }
   }, []);
 
-  // 1. Carrega estado inicial do servidor na montagem
+  // 1. Escuta mudanças em tempo real entre abas e janelas no mesmo navegador (BroadcastChannel - 0ms)
+  useEffect(() => {
+    const unsubscribe = subscribeToSync((msg) => {
+      if (msg.type === 'UPDATE_CANDIDATE') {
+        if (msg.side === 'left') setLeftCandidate(msg.candidate);
+        else setRightCandidate(msg.candidate);
+      } else if (msg.type === 'UPDATE_ALL_CANDIDATES') {
+        setLeftCandidate(msg.left);
+        setRightCandidate(msg.right);
+      } else if (msg.type === 'UPDATE_POINTS') {
+        setLeftPoints(msg.leftPoints);
+        setRightPoints(msg.rightPoints);
+        setLeftGiftsCount(msg.leftGifts);
+        setRightGiftsCount(msg.rightGifts);
+      } else if (msg.type === 'UPDATE_TIME') {
+        setTimeLeft(msg.timeLeft);
+        setIsPaused(msg.isPaused);
+        if (typeof msg.roundDuration === 'number') setRoundDuration(msg.roundDuration);
+      } else if (msg.type === 'UPDATE_VICTORY_SCORE') {
+        setVictoryScore(msg.victoryScore);
+      } else if (msg.type === 'UPDATE_ROUND_NUMBER') {
+        setRoundNumber(msg.roundNumber);
+      } else if (msg.type === 'RESET_ROUND') {
+        setLeftPoints(0);
+        setRightPoints(0);
+        setLeftGiftsCount(0);
+        setRightGiftsCount(0);
+        setIsRoundOver(false);
+        setWinner(null);
+      } else if (msg.type === 'TRIGGER_VOTE') {
+        playVoteSound();
+        spawnReaction(msg.giftIcon || '🌹', msg.side);
+      }
+    });
+    return unsubscribe;
+  }, [spawnReaction]);
+
+  // 2. Relógio Autônomo e Confiável (Garante que o cronômetro nunca fica parado)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Se o servidor estiver enviando TIME_TICK nos últimos 1800ms, o servidor lidera
+      if (Date.now() - lastServerTickRef.current < 1800) {
+        return;
+      }
+
+      if (isPaused) return;
+
+      if (!isRoundOver) {
+        setTimeLeft((prev) => {
+          if (prev > 1) {
+            const next = prev - 1;
+            saveTimeLeft(next);
+            return next;
+          }
+
+          // Fim do tempo da rodada!
+          setIsRoundOver(true);
+          const currentWinner =
+            leftPoints > rightPoints
+              ? 'left'
+              : rightPoints > leftPoints
+              ? 'right'
+              : 'draw';
+          setWinner(currentWinner);
+          setResetCountdown(5);
+
+          if (currentWinner === 'left') {
+            setVictoryScore((s) => {
+              const updated = { ...s, left: s.left + 1 };
+              saveVictoryScore(updated);
+              broadcastSync({ type: 'UPDATE_VICTORY_SCORE', victoryScore: updated });
+              return updated;
+            });
+          } else if (currentWinner === 'right') {
+            setVictoryScore((s) => {
+              const updated = { ...s, right: s.right + 1 };
+              saveVictoryScore(updated);
+              broadcastSync({ type: 'UPDATE_VICTORY_SCORE', victoryScore: updated });
+              return updated;
+            });
+          }
+
+          return 0;
+        });
+      } else {
+        // Contagem regressiva da tela de vitória (5 segundos)
+        setResetCountdown((prev) => {
+          if (prev > 1) {
+            return prev - 1;
+          }
+
+          // Inicia próxima rodada automaticamente!
+          setRoundNumber((r) => {
+            const nextRound = r + 1;
+            saveRoundNumber(nextRound);
+            broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: nextRound });
+            return nextRound;
+          });
+          setLeftPoints(0);
+          setRightPoints(0);
+          setLeftGiftsCount(0);
+          setRightGiftsCount(0);
+          setLeftCommentProgress(0);
+          setRightCommentProgress(0);
+          setIsRoundOver(false);
+          setWinner(null);
+          setTimeLeft(roundDuration);
+          saveTimeLeft(roundDuration);
+          savePoints({ leftPoints: 0, rightPoints: 0, leftGifts: 0, rightGifts: 0 });
+          broadcastSync({ type: 'RESET_ROUND' });
+          return 5;
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isPaused, isRoundOver, leftPoints, rightPoints, roundDuration]);
+
+  // 3. Carrega estado inicial do servidor na montagem (se houver servidor backend)
   useEffect(() => {
     fetch('/api/state')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('Servidor offline ou estático');
+        return res.json();
+      })
       .then((data) => {
         applyServerState(data);
       })
       .catch((err) => {
-        console.warn('Erro ao buscar estado inicial do servidor', err);
+        console.info('Modo Local Ativo: Usando armazenamento persistente local', err);
       });
   }, [applyServerState]);
 
-  // 2. Conexão SSE para sincronização em tempo real entre todas as telas, OBS e público
+  // 4. Conexão SSE para sincronização em tempo real entre todas as telas, OBS e público
   useEffect(() => {
     let eventSource: EventSource | null = null;
     try {
@@ -201,6 +376,7 @@ export default function App() {
               });
             }
           } else if (data.type === 'TIME_TICK') {
+            lastServerTickRef.current = Date.now();
             setTimeLeft(data.timeLeft);
             setIsPaused(data.isPaused);
             setIsRoundOver(data.isRoundOver);

@@ -17,6 +17,7 @@ const STORAGE_KEYS = {
   ROUND_DURATION: 'urna_round_duration_v2',
   ROUND_NUMBER: 'urna_round_number_v2',
   TIME_LEFT: 'urna_time_left_v2',
+  IS_PAUSED: 'urna_is_paused_v2',
   POINTS: 'urna_points_v2',
   VICTORY_SCORE: 'urna_victory_score_v2',
   BOT_SETTINGS: 'urna_bot_settings_v2',
@@ -116,6 +117,43 @@ export function saveRoundDuration(duration: number) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEYS.ROUND_DURATION, String(duration));
+  } catch (e) {}
+}
+
+export function getSavedTimeLeft(defaultValue = 125): number {
+  if (typeof window === 'undefined') return defaultValue;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.TIME_LEFT);
+    if (raw) {
+      const val = parseInt(raw, 10);
+      if (!isNaN(val) && val >= 0) return val;
+    }
+  } catch (e) {}
+  return defaultValue;
+}
+
+export function saveTimeLeft(timeLeft: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.TIME_LEFT, String(timeLeft));
+  } catch (e) {}
+}
+
+export function getSavedIsPaused(defaultValue = false): boolean {
+  if (typeof window === 'undefined') return defaultValue;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.IS_PAUSED);
+    if (raw !== null) {
+      return raw === 'true';
+    }
+  } catch (e) {}
+  return defaultValue;
+}
+
+export function saveIsPaused(isPaused: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.IS_PAUSED, String(isPaused));
   } catch (e) {}
 }
 

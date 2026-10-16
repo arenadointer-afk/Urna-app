@@ -461,6 +461,25 @@ app.post('/api/duration', (req: Request, res: Response) => {
   res.status(400).json({ error: 'Duração inválida' });
 });
 
+// 4.1 Add Time to current round (+30s, +60s, etc.)
+app.post('/api/time/add', (req: Request, res: Response) => {
+  const { seconds } = req.body;
+  const num = parseInt(seconds, 10);
+  if (!isNaN(num) && num > 0) {
+    serverState.timeLeft += num;
+    if (serverState.timeLeft > serverState.roundDuration) {
+      serverState.roundDuration = serverState.timeLeft;
+    }
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, timeLeft: serverState.timeLeft, roundDuration: serverState.roundDuration });
+  }
+  res.status(400).json({ error: 'Segundos inválidos' });
+});
+
 // 5. Toggle Pause
 app.post('/api/pause', (req: Request, res: Response) => {
   serverState.isPaused = !serverState.isPaused;
