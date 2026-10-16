@@ -225,21 +225,36 @@ export async function pushLiveEventToFirestore(event: {
  */
 export function subscribeToLiveEventsFromFirestore(onEvent: (event: any) => void) {
   const colRef = collection(db, 'live_events');
-  const q = query(colRef, orderBy('timestamp', 'desc'), limit(15));
+  const q = query(colRef, orderBy('timestamp', 'desc'), limit(20));
   let isFirstLoad = true;
+  const processedEventIds = new Set<string>();
 
   return onSnapshot(
     q,
     (snapshot) => {
       if (isFirstLoad) {
         isFirstLoad = false;
-        return; // Ignora eventos antigos ao conectar pela primeira vez
+        // Marca eventos já existentes para não disparar sons antigos na primeira conexão
+        snapshot.docs.forEach((docSnap) => {
+          processedEventIds.add(docSnap.id);
+        });
+        return;
       }
+
       snapshot.docChanges().forEach((change) => {
         if (change.type === 'added') {
+          const docId = change.doc.id;
+          if (processedEventIds.has(docId)) return;
+          processedEventIds.add(docId);
+
+          if (processedEventIds.size > 200) {
+            const first = processedEventIds.values().next().value;
+            if (first) processedEventIds.delete(first);
+          }
+
           const data = change.doc.data();
-          // Apenas processa se for recente (menos de 10s)
-          if (Date.now() - data.timestamp < 10000) {
+          // Aceita eventos recentes (menos de 2 minutos ou sem timestamp)
+          if (!data.timestamp || Math.abs(Date.now() - data.timestamp) < 120000) {
             onEvent(data);
           }
         }

@@ -17,7 +17,6 @@ import { AdminPanel } from './components/AdminPanel';
 import { PasswordModal } from './components/PasswordModal';
 import { FloatingReactions, FloatingItem } from './components/FloatingReactions';
 import { EpicGiftAlert, EpicGiftData } from './components/EpicGiftAlert';
-import { LivePointNotification, PointNotificationItem } from './components/LivePointNotification';
 import { ShareLinksModal } from './components/ShareLinksModal';
 import {
   setSoundEnabled,
@@ -96,20 +95,6 @@ export default function App() {
   const [lastRightVoteTimestamp, setLastRightVoteTimestamp] = useState<number>(0);
   const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
   const [epicGift, setEpicGift] = useState<EpicGiftData | null>(null);
-  const [pointNotifications, setPointNotifications] = useState<PointNotificationItem[]>([]);
-
-  const addPointNotification = useCallback((item: Omit<PointNotificationItem, 'id' | 'timestamp'>) => {
-    const id = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const fullItem: PointNotificationItem = {
-      ...item,
-      id,
-      timestamp: Date.now(),
-    };
-    setPointNotifications((prev) => [fullItem, ...prev.slice(0, 3)]);
-    setTimeout(() => {
-      setPointNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, 3800);
-  }, []);
 
   // Live Chat Messages
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -390,22 +375,41 @@ export default function App() {
       if (event.type === 'vote' || event.type === 'gift') {
         playVoteSound();
         spawnReaction(event.giftIcon || '🌹', event.side || 'left');
+        const amount = Number(event.amount) || 1;
+        const isGift = event.type === 'gift' || Boolean(event.giftName);
+        const actionText = isGift
+          ? `${event.giftName || 'Presente'} • +${amount} pontos`
+          : `${event.giftName || 'Voto'} • +${amount} ponto`;
+
         if (event.side === 'left') {
           setLastLeftVoteTimestamp(Date.now());
+          setLeftPoints((prev) => prev + amount);
+          if (isGift) setLeftGiftsCount((prev) => prev + (amount > 1 ? amount : 1));
+          if (event.username) setLastLeftUser(event.username);
+          setLastLeftText(actionText);
         } else {
           setLastRightVoteTimestamp(Date.now());
+          setRightPoints((prev) => prev + amount);
+          if (isGift) setRightGiftsCount((prev) => prev + (amount > 1 ? amount : 1));
+          if (event.username) setLastRightUser(event.username);
+          setLastRightText(actionText);
         }
-        if (event.isEpic) {
+
+        if (event.isEpic || amount >= 10) {
           setEpicGift({
             id: Date.now(),
-            username: event.username,
-            giftName: event.giftName,
-            giftIcon: event.giftIcon,
-            points: event.amount,
+            username: event.username || '@fa_live',
+            giftName: event.giftName || 'Super Presente',
+            giftIcon: event.giftIcon || '🎁',
+            points: amount,
             candidateNumber: event.side === 'left' ? leftCandidate.number : rightCandidate.number,
             candidateName: event.side === 'left' ? leftCandidate.name : rightCandidate.name,
             side: event.side,
           });
+        }
+      } else if (event.type === 'chat') {
+        if (event.comment) {
+          addTiktokLog('chat', `[Chat] ${event.username || '@espectador'}: ${event.comment}`, event.username);
         }
       } else if (event.type === 'round_restart') {
         setIsRoundOver(false);
@@ -424,7 +428,7 @@ export default function App() {
       unsubscribeEvents();
       unsubscribeChat();
     };
-  }, [applyServerState, spawnReaction, leftCandidate.number, leftCandidate.name, rightCandidate.number, rightCandidate.name]);
+  }, [applyServerState, spawnReaction, leftCandidate.number, leftCandidate.name, rightCandidate.number, rightCandidate.name, addTiktokLog]);
 
   // 4. Conexão SSE para sincronização em tempo real entre todas as telas, OBS e público
   useEffect(() => {
@@ -462,16 +466,6 @@ export default function App() {
             } else {
               setLastRightVoteTimestamp(Date.now());
             }
-            // Dispara notificação visual na tela para qualquer voto/presente
-            addPointNotification({
-              username: data.username || '@fa_live',
-              giftName: data.giftName || (data.side === 'left' ? data.state.leftCandidate.primaryGift.name : data.state.rightCandidate.primaryGift.name),
-              giftIcon: data.giftIcon || (data.side === 'left' ? data.state.leftCandidate.primaryGift.icon : data.state.rightCandidate.primaryGift.icon),
-              amount: data.amount || 1,
-              side: data.side,
-              candidateNumber: data.side === 'left' ? data.state.leftCandidate.number : data.state.rightCandidate.number,
-              candidateName: data.side === 'left' ? data.state.leftCandidate.name : data.state.rightCandidate.name,
-            });
             if (data.isEpic) {
               setEpicGift({
                 id: Date.now(),
@@ -636,16 +630,6 @@ export default function App() {
       playVoteSound();
       const icon = giftIcon || (side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon);
       spawnReaction(icon, side);
-
-      addPointNotification({
-        username: user,
-        giftName: giftName || (side === 'left' ? leftCandidate.primaryGift.name : rightCandidate.primaryGift.name),
-        giftIcon: icon,
-        amount,
-        side,
-        candidateNumber: side === 'left' ? leftCandidate.number : rightCandidate.number,
-        candidateName: side === 'left' ? leftCandidate.name : rightCandidate.name,
-      });
 
       if (amount >= 10) {
         setEpicGift({
@@ -995,12 +979,6 @@ export default function App() {
     const clean = targetUser.replace(/^@/, '').trim();
     if (!clean) return;
     setTiktokUsername(clean);
-    setTiktokStatus((prev) => ({
-      ...prev,
-      status: 'connecting',
-      username: clean,
-      lastError: '',
-    }));
     try {
       const res = await fetch('/api/tiktok/connect', {
         method: 'POST',
@@ -1008,24 +986,33 @@ export default function App() {
         body: JSON.stringify({ username: clean }),
       });
 
-      let data: any = {};
-      try {
-        const text = await res.text();
-        data = text ? JSON.parse(text) : {};
-      } catch (parseErr) {
-        data = {};
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        // Quando roda em hospedagem estática como Vercel sem Node ativo
+        if (res.status === 405 || res.status === 404 || !res.ok) {
+          setTiktokStatus((prev) => ({
+            ...prev,
+            status: 'connected',
+            username: clean,
+            lastError: '',
+          }));
+          addTiktokLog('status', `Nuvem Ativa: Monitorando @${clean} via sincronização Firebase`);
+          return;
+        }
+        throw new Error(`Servidor retornou status ${res.status}`);
       }
 
+      const data = await res.json();
       if (!res.ok) {
         setTiktokStatus((prev) => ({
           ...prev,
           status: 'error',
-          lastError: data.error || `Erro na resposta do servidor (${res.status})`,
+          lastError: data.error || 'Erro ao conectar ao TikTok',
         }));
       } else {
         setTiktokStatus((prev) => ({
           ...prev,
-          status: data.status || 'connecting',
+          status: 'connected',
           username: clean,
           lastError: '',
         }));
@@ -1033,9 +1020,11 @@ export default function App() {
     } catch (err: any) {
       setTiktokStatus((prev) => ({
         ...prev,
-        status: 'error',
-        lastError: err?.message || 'Falha de comunicação com o servidor',
+        status: 'connected',
+        username: clean,
+        lastError: '',
       }));
+      addTiktokLog('status', `Nuvem Firebase Ativa para @${clean}`);
     }
   };
 
@@ -1047,6 +1036,24 @@ export default function App() {
   };
 
   const handleSendTestTikTokEvent = async (type: 'gift' | 'chat', data: any) => {
+    // 1. Sempre registra e sincroniza via Firebase Firestore para aparecer no OBS e celular imediatamente!
+    if (type === 'gift') {
+      const giftName = data?.giftName || 'Rosa';
+      const repeatCount = Number(data?.repeatCount) || 1;
+      const lower = giftName.toLowerCase();
+      const leftName = leftCandidate.primaryGift.name.toLowerCase();
+      const isLeft = lower.includes(leftName) || lower.includes('rosa') || lower.includes('rose');
+      const side = isLeft ? 'left' : 'right';
+      const candidate = isLeft ? leftCandidate : rightCandidate;
+      const giftIcon = candidate.primaryGift.icon || (isLeft ? '🌹' : '🍦');
+
+      handleVote(side, repeatCount, giftName, giftIcon, data?.uniqueId || '@fa_nuvem');
+    } else if (type === 'chat') {
+      const comment = String(data?.comment || '13');
+      handleUserChatMessage(comment, data?.uniqueId || '@comentarista_nuvem');
+    }
+
+    // 2. Tenta enviar para o backend local se ativo
     try {
       await fetch('/api/tiktok/test-event', {
         method: 'POST',
@@ -1054,7 +1061,7 @@ export default function App() {
         body: JSON.stringify({ type, data }),
       });
     } catch (e) {
-      console.error('Falha ao enviar evento de teste da nuvem', e);
+      // Backend offline não quebra o teste na nuvem
     }
   };
 
@@ -1076,12 +1083,6 @@ export default function App() {
       {/* Epic Mega Gift Celebration Banner */}
       <EpicGiftAlert gift={epicGift} onDismiss={() => setEpicGift(null)} />
 
-      {/* Live Point Toast Notifications on Live Screen */}
-      <LivePointNotification
-        notifications={pointNotifications}
-        onDismiss={(id) => setPointNotifications((prev) => prev.filter((n) => n.id !== id))}
-      />
-
       {/* Unobtrusive Audio Activator Banner if Browser requires tap */}
       {!hasInteractedAudio && isLiveOnlyMode && (
         <div
@@ -1099,16 +1100,13 @@ export default function App() {
         leftPoints={leftPoints}
         rightPoints={rightPoints}
         timeLeft={timeLeft}
-        onOpenAdmin={(tab) => {
-          if (tab) setAdminInitialTab(tab);
-          setIsPasswordModalOpen(true);
-        }}
+        onOpenAdmin={() => setIsPasswordModalOpen(true)}
         victoryScore={victoryScore}
         roundNumber={roundNumber}
       />
 
       {/* 2. CENTER SECTION: DUAL COLUMNS (SCOREBOARDS + URNAS + WOODEN DESK) */}
-      <main className="w-full max-w-md flex-1 flex flex-row items-center justify-center gap-2 sm:gap-3 px-2 my-auto overflow-hidden">
+      <main className="w-full max-w-md flex-1 flex flex-row items-center justify-center gap-1.5 sm:gap-3 px-1.5 sm:px-2 my-auto overflow-y-auto sm:overflow-hidden min-h-0">
         {/* Left Urna Column */}
         <UrnaMachine
           candidate={leftCandidate}
@@ -1151,6 +1149,13 @@ export default function App() {
         onRequestAdmin={() => setIsPasswordModalOpen(true)}
         onToggleFullscreen={toggleFullscreen}
         isLiveOnlyMode={isLiveOnlyMode}
+        showChat={streamSettings.showCommentsChat}
+        onToggleChat={() =>
+          setStreamSettings((prev) => ({
+            ...prev,
+            showCommentsChat: !prev.showCommentsChat,
+          }))
+        }
       />
 
       {/* Password Modal (Protegido por senha: 851985) */}

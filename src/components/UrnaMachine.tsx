@@ -38,7 +38,6 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   const [isConfirmFlashing, setIsConfirmFlashing] = useState(false);
   const [showFimScreen, setShowFimScreen] = useState(false);
   const [lastConfirmedPoints, setLastConfirmedPoints] = useState(1);
-  const [floatingScoreAlert, setFloatingScoreAlert] = useState<string | null>(null);
 
   // When candidate changes, keep screen in clean waiting state
   useEffect(() => {
@@ -49,11 +48,8 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   useEffect(() => {
     if (lastVoteTimestamp > 0) {
       triggerVoteSequence(candidate.number, 1);
-      setFloatingScoreAlert(lastVoteText || '+1 ponto');
-      const timer = setTimeout(() => setFloatingScoreAlert(null), 3000);
-      return () => clearTimeout(timer);
     }
-  }, [lastVoteTimestamp, lastVoteText]);
+  }, [lastVoteTimestamp]);
 
   const triggerVoteSequence = (numStr: string, pointsAmount = 1) => {
     const digits = numStr.split('');
@@ -164,20 +160,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
         </div>
 
         {/* Big Massive Points Number (56 / 88) */}
-        <div className="flex flex-col items-center justify-center my-0.5 relative">
-          {floatingScoreAlert && (
-            <div className="absolute -top-3.5 z-30 animate-bounce pointer-events-none">
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-black font-digital shadow-2xl border-2 text-white uppercase whitespace-nowrap ${
-                  isRedTheme
-                    ? 'bg-red-600 border-yellow-300 shadow-red-500/80 animate-pulse'
-                    : 'bg-blue-600 border-yellow-300 shadow-blue-500/80 animate-pulse'
-                }`}
-              >
-                ⚡ {floatingScoreAlert}
-              </span>
-            </div>
-          )}
+        <div className="flex flex-col items-center justify-center my-0.5">
           <span
             className="text-4xl sm:text-5xl font-black font-digital tracking-tight text-white leading-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
             style={{ fontFamily: "'Chakra Petch', sans-serif" }}
@@ -212,15 +195,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
 
       {/* 2. Donor Toast Ticker Badge (@Mara • Rosa x2 • +2 pontos) */}
       <div className="w-full my-1 min-h-[19px] flex items-center justify-center">
-        <div
-          className={`w-full px-1.5 py-0.5 rounded-full text-[8px] sm:text-[9px] truncate text-center shadow transition-all ${
-            floatingScoreAlert
-              ? isRedTheme
-                ? 'bg-red-950 border-2 border-red-400 text-white font-extrabold shadow-red-500/40 animate-pulse'
-                : 'bg-blue-950 border-2 border-blue-400 text-white font-extrabold shadow-blue-500/40 animate-pulse'
-              : 'bg-black/85 border border-slate-700/80 text-slate-300'
-          }`}
-        >
+        <div className="w-full px-1.5 py-0.5 rounded-full bg-black/85 border border-slate-700/80 text-[8px] sm:text-[9px] text-slate-300 truncate text-center shadow">
           {lastVoteUser ? (
             <span>
               <strong className="text-amber-300">{lastVoteUser}</strong> • {lastVoteText || 'votou'}

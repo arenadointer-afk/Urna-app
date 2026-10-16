@@ -6,6 +6,8 @@ export interface GiftItem {
   badge?: string;
 }
 
+export type MusicTrackType = 'hype' | 'suspense' | 'marchinha' | 'retro' | 'custom' | 'off';
+
 export interface Candidate {
   id: 'left' | 'right';
   number: string;

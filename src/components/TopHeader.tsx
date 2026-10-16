@@ -6,7 +6,7 @@ interface TopHeaderProps {
   leftPoints: number;
   rightPoints: number;
   timeLeft: number;
-  onOpenAdmin: (tab?: 'first-live' | 'boosters' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music') => void;
+  onOpenAdmin: () => void;
   victoryScore: VictoryScore;
   roundNumber: number;
 }
@@ -34,59 +34,33 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <header className="w-full flex flex-col items-center select-none pt-1 shrink-0 px-2">
-      {/* 1. Golden 3D Title Banner: ELEIÇÕES 2026 INTERATIVO + Direct ADM button */}
-      <div className="w-full max-w-md flex items-center justify-between mb-1 relative px-1">
-        <div className="w-16">
-          <button
-            type="button"
-            onClick={() => onOpenAdmin()}
-            title="Abrir Painel Administrativo"
-            className="px-2 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/50 text-amber-300 font-black text-[10px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow"
+      {/* 1. Golden 3D Title Banner: ELEIÇÕES 2026 INTERATIVO (Secret tap to open ADM) */}
+      <div
+        onClick={onOpenAdmin}
+        title="Eleições 2026 Interativo"
+        className="relative flex flex-col items-center mb-1 cursor-default active:scale-[0.99] transition-transform"
+      >
+        {/* Brazilian Ribbon background */}
+        <div className="absolute -inset-x-6 -top-1 h-10 bg-gradient-to-r from-emerald-600 via-yellow-400 to-emerald-600 rounded-full blur-[2px] opacity-70" />
+
+        <div className="relative z-10 flex flex-col items-center">
+          {/* Main Gold 3D Title */}
+          <h1
+            className="text-2xl sm:text-3xl font-black italic tracking-wider uppercase text-yellow-300 drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]"
+            style={{
+              textShadow: '0 2px 0 #b45309, 0 4px 0 #78350f, 0 6px 12px rgba(0,0,0,0.9)',
+              fontFamily: "'Chakra Petch', sans-serif",
+            }}
           >
-            <span>⚙️</span>
-            <span>ADM</span>
-          </button>
-        </div>
+            ELEIÇÕES 2026
+          </h1>
 
-        <div
-          onClick={() => onOpenAdmin()}
-          title="Toque para abrir Painel ADM"
-          className="relative flex flex-col items-center cursor-pointer active:scale-[0.99] transition-transform"
-        >
-          {/* Brazilian Ribbon background */}
-          <div className="absolute -inset-x-6 -top-1 h-10 bg-gradient-to-r from-emerald-600 via-yellow-400 to-emerald-600 rounded-full blur-[2px] opacity-70" />
-
-          <div className="relative z-10 flex flex-col items-center">
-            {/* Main Gold 3D Title */}
-            <h1
-              className="text-2xl sm:text-3xl font-black italic tracking-wider uppercase text-yellow-300 drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]"
-              style={{
-                textShadow: '0 2px 0 #b45309, 0 4px 0 #78350f, 0 6px 12px rgba(0,0,0,0.9)',
-                fontFamily: "'Chakra Petch', sans-serif",
-              }}
-            >
-              ELEIÇÕES 2026
-            </h1>
-
-            {/* INTERATIVO Blue Banner Badge */}
-            <div className="px-5 py-0.5 -mt-1 rounded-full bg-gradient-to-r from-blue-700 via-blue-500 to-blue-700 border-2 border-yellow-300 shadow-md">
-              <span className="text-[10px] sm:text-xs font-black tracking-widest text-white uppercase drop-shadow">
-                INTERATIVO
-              </span>
-            </div>
+          {/* INTERATIVO Blue Banner Badge */}
+          <div className="px-5 py-0.5 -mt-1 rounded-full bg-gradient-to-r from-blue-700 via-blue-500 to-blue-700 border-2 border-yellow-300 shadow-md">
+            <span className="text-[10px] sm:text-xs font-black tracking-widest text-white uppercase drop-shadow">
+              INTERATIVO
+            </span>
           </div>
-        </div>
-
-        <div className="w-16 flex justify-end">
-          <button
-            type="button"
-            onClick={() => onOpenAdmin('cloud')}
-            title="Conectar TikTok LIVE e Configurações"
-            className="px-2 py-1 rounded-xl bg-red-600/30 hover:bg-red-600/50 border border-red-500/50 text-red-200 font-black text-[9px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow"
-          >
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <span>LIVE</span>
-          </button>
         </div>
       </div>
 

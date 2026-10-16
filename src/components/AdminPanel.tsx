@@ -6,8 +6,15 @@ import {
   PresetDuel,
   VictoryScore,
   TikTokStatus,
+  MusicTrackType,
 } from '../types';
 import { PRESET_DUELS } from '../utils/presets';
+import {
+  getCustomAudioInfo,
+  setCustomAudioData,
+  removeCustomAudio,
+  initAudioContext,
+} from '../utils/audio';
 import {
   Settings,
   Zap,
@@ -45,6 +52,7 @@ import {
   Send,
   Terminal,
   Plus,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -66,8 +74,8 @@ interface AdminPanelProps {
   onUpdateBotSettings: (settings: Partial<BotSettings>) => void;
   streamSettings: StreamSettings;
   onUpdateStreamSettings: (settings: Partial<StreamSettings>) => void;
-  musicTrack: 'hype' | 'suspense' | 'marchinha' | 'retro' | 'off';
-  onChangeMusicTrack: (track: 'hype' | 'suspense' | 'marchinha' | 'retro' | 'off', customUrl?: string) => void;
+  musicTrack: MusicTrackType;
+  onChangeMusicTrack: (track: MusicTrackType, customUrl?: string) => void;
   musicVolume: number;
   onChangeMusicVolume: (volume: number) => void;
   initialTab?: 'first-live' | 'boosters' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music';
@@ -187,6 +195,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [customTimeInput, setCustomTimeInput] = useState(String(roundDuration));
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false);
   const [testSuccessMessage, setTestSuccessMessage] = useState('');
+  const [customAudioInfo, setCustomAudioInfo] = useState(() => getCustomAudioInfo());
+  const [audioUploadError, setAudioUploadError] = useState('');
+
+  const handleCustomAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('audio/') && !file.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i)) {
+      setAudioUploadError('Selecione um arquivo de áudio válido (.mp3, .wav, .m4a, etc)');
+      return;
+    }
+
+    setAudioUploadError('');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        setCustomAudioData(dataUrl, file.name);
+        setCustomAudioInfo({
+          hasCustom: true,
+          name: file.name,
+          src: dataUrl,
+        });
+        initAudioContext();
+        onChangeMusicTrack('custom', dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveCustomAudio = () => {
+    removeCustomAudio();
+    setCustomAudioInfo(getCustomAudioInfo());
+    if (musicTrack === 'custom') {
+      onChangeMusicTrack('off');
+    }
+  };
 
   // Sync initialTab when provided
   React.useEffect(() => {
@@ -214,6 +259,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setCopiedAdminUrl(true);
     setTimeout(() => setCopiedAdminUrl(false), 2000);
   };
+
+  if (!isOpen) return null;
 
   const [formCandidate, setFormCandidate] = useState<Candidate>(
     editingSide === 'left' ? leftCandidate : rightCandidate
@@ -347,8 +394,6 @@ tiktokLiveConnection.on('gift', data => {
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2500);
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
@@ -1959,22 +2004,119 @@ tiktokLiveConnection.on('gift', data => {
                       <Music className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-black text-sm text-white">Trilha Sonora ao Vivo</h4>
+                      <h4 className="font-black text-sm text-white">Músicas da Live & Trilha Sonora</h4>
                       <p className="text-[11px] text-purple-200">
-                        Músicas sintéticas de fundo sem direitos autorais para manter a live aquecida!
+                        Carregue sua própria música em MP3 ou use nossas trilhas energéticas de batalha!
                       </p>
                     </div>
                   </div>
                   <span
-                    className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${
+                    className={`text-[9px] px-2.5 py-1 rounded-full font-black uppercase ${
                       musicTrack !== 'off'
                         ? 'bg-purple-500 text-white animate-pulse'
                         : 'bg-slate-800 text-slate-400'
                     }`}
                   >
-                    {musicTrack !== 'off' ? `Tocando: ${musicTrack}` : 'Mudo'}
+                    {musicTrack !== 'off'
+                      ? musicTrack === 'custom'
+                        ? `Tocando: ${customAudioInfo.name}`
+                        : `Tocando: ${musicTrack}`
+                      : 'Mudo'}
                   </span>
                 </div>
+              </div>
+
+              {/* CARD DE UPLOAD DE MÚSICA PERSONALIZADA (MP3 / WAV / ÁUDIO DO CELULAR OU PC) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950/90 via-slate-950 to-purple-950/90 border-2 border-indigo-400/60 shadow-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-300">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-sm text-white flex items-center gap-1.5">
+                        <span>UPLOAD DE MÚSICA DO CELULAR / PC</span>
+                        <span className="text-[9px] px-2 py-0.2 rounded-full bg-indigo-500 text-white font-bold">
+                          MP3 / WAV
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-indigo-200">
+                        Toque qualquer música da sua preferência repetindo em loop durante a live!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {audioUploadError && (
+                  <div className="p-2 rounded-xl bg-red-950/80 border border-red-500/50 text-red-200 text-xs">
+                    ⚠️ {audioUploadError}
+                  </div>
+                )}
+
+                {/* Upload Button + File Input */}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <label className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 transition-all">
+                    <Upload className="w-4 h-4" />
+                    <span>Carregar Música do Celular / Computador</span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleCustomAudioUpload}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {customAudioInfo.hasCustom && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCustomAudio}
+                      className="px-3 py-2.5 rounded-xl bg-red-950/70 hover:bg-red-900 border border-red-500/50 text-red-300 text-xs font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                      title="Excluir música personalizada"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Remover</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Custom Audio Status Card */}
+                {customAudioInfo.hasCustom ? (
+                  <div
+                    onClick={() => {
+                      initAudioContext();
+                      onChangeMusicTrack('custom');
+                    }}
+                    className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                      musicTrack === 'custom'
+                        ? 'bg-indigo-900/60 border-indigo-400 ring-2 ring-indigo-500/50 text-white shadow-lg'
+                        : 'bg-slate-900 border-slate-700 hover:border-indigo-400 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`p-2 rounded-lg ${musicTrack === 'custom' ? 'bg-indigo-500 text-white animate-bounce' : 'bg-slate-800 text-slate-400'}`}>
+                        {musicTrack === 'custom' ? <Volume2 className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-black text-xs text-white truncate">
+                          {customAudioInfo.name}
+                        </div>
+                        <div className="text-[10px] text-indigo-300 font-medium">
+                          {musicTrack === 'custom' ? '▶ Tocando agora em loop infinito' : 'Toque para reproduzir esta música'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <span className={`text-[10px] px-2.5 py-1 rounded-lg font-black uppercase shrink-0 ${
+                      musicTrack === 'custom' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-300'
+                    }`}>
+                      {musicTrack === 'custom' ? 'Ativa' : 'Tocar'}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400 text-center">
+                    Nenhuma música enviada ainda. Selecione um arquivo MP3 ou WAV para tocar!
+                  </div>
+                )}
               </div>
 
               {/* Volume Slider */}
@@ -1982,7 +2124,7 @@ tiktokLiveConnection.on('gift', data => {
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-extrabold text-slate-200 flex items-center gap-1.5">
                     <Volume2 className="w-4 h-4 text-purple-400" />
-                    Volume da Música de Fundo:
+                    Volume Geral da Música:
                   </span>
                   <span className="font-black font-digital text-purple-300 text-sm">
                     {Math.round(musicVolume * 100)}%
@@ -2002,14 +2144,17 @@ tiktokLiveConnection.on('gift', data => {
               {/* Tracks Selection Grid */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-300 block">
-                  Escolha a Música da Batalha:
+                  Ou Escolha uma das Trilhas Energéticas Prontas:
                 </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {/* Track 1: Trap Hype */}
                   <button
                     type="button"
-                    onClick={() => onChangeMusicTrack('hype')}
+                    onClick={() => {
+                      initAudioContext();
+                      onChangeMusicTrack('hype');
+                    }}
                     className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
                       musicTrack === 'hype'
                         ? 'bg-purple-900/60 border-purple-400 ring-2 ring-purple-500/50 text-white shadow-lg'
@@ -2017,18 +2162,21 @@ tiktokLiveConnection.on('gift', data => {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-black text-xs text-purple-300">⚡ Trap Hype TikTok</span>
+                      <span className="font-black text-xs text-purple-300">⚡ Trap Hype TikTok (Batidão)</span>
                       {musicTrack === 'hype' && <Check className="w-4 h-4 text-purple-400" />}
                     </div>
                     <p className="text-[10px] text-slate-400 leading-tight">
-                      Beat pesado e acelerado com sintetizador. Ideal para duelos acirrados!
+                      Beat pesado e acelerado com bumbo e hi-hats. Mantém o público acordado e votando!
                     </p>
                   </button>
 
                   {/* Track 2: Marchinha & Funk Brasil */}
                   <button
                     type="button"
-                    onClick={() => onChangeMusicTrack('marchinha')}
+                    onClick={() => {
+                      initAudioContext();
+                      onChangeMusicTrack('marchinha');
+                    }}
                     className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
                       musicTrack === 'marchinha'
                         ? 'bg-yellow-950/60 border-yellow-400 ring-2 ring-yellow-500/50 text-white shadow-lg'
@@ -2036,18 +2184,21 @@ tiktokLiveConnection.on('gift', data => {
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-black text-xs text-yellow-300">🇧🇷 Marchinha & Ritmo Brasil</span>
+                      <span className="font-black text-xs text-yellow-300">🇧🇷 Marchinha Eleitoral Vibrante</span>
                       {musicTrack === 'marchinha' && <Check className="w-4 h-4 text-yellow-400" />}
                     </div>
                     <p className="text-[10px] text-slate-400 leading-tight">
-                      Ritmo festivo de eleição popular e carnaval. A cara do Brasil!
+                      Ritmo festivo de eleição brasileira com melodia contagiante.
                     </p>
                   </button>
 
                   {/* Track 3: Suspense Épico */}
                   <button
                     type="button"
-                    onClick={() => onChangeMusicTrack('suspense')}
+                    onClick={() => {
+                      initAudioContext();
+                      onChangeMusicTrack('suspense');
+                    }}
                     className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
                       musicTrack === 'suspense'
                         ? 'bg-red-950/60 border-red-400 ring-2 ring-red-500/50 text-white shadow-lg'
@@ -2066,7 +2217,10 @@ tiktokLiveConnection.on('gift', data => {
                   {/* Track 4: Arcade 8-Bit */}
                   <button
                     type="button"
-                    onClick={() => onChangeMusicTrack('retro')}
+                    onClick={() => {
+                      initAudioContext();
+                      onChangeMusicTrack('retro');
+                    }}
                     className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
                       musicTrack === 'retro'
                         ? 'bg-cyan-950/60 border-cyan-400 ring-2 ring-cyan-500/50 text-white shadow-lg'
@@ -2096,7 +2250,7 @@ tiktokLiveConnection.on('gift', data => {
                   }`}
                 >
                   <VolumeX className="w-4 h-4" />
-                  <span>Desligar Trilha Sonora (Apenas Efeitos Sonoros da Urna)</span>
+                  <span>Desligar Música (Manter Apenas Sons da Urna "Pirilili")</span>
                 </button>
               </div>
             </div>

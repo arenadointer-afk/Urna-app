@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { createRequire } from 'module';
 import path from 'path';
@@ -7,7 +7,14 @@ import { fileURLToPath } from 'url';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
-import { TikTokLiveConnection } from 'tiktok-live-connector';
+const require = createRequire(import.meta.url);
+let TikTokLiveConnectionClass: any = null;
+try {
+  const tlc = require('tiktok-live-connector');
+  TikTokLiveConnectionClass = tlc.TikTokLiveConnection || tlc.WebcastPushConnection || tlc.default || tlc;
+} catch (e) {
+  console.warn('tiktok-live-connector import error:', e);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -680,7 +687,11 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
   });
 
   try {
-    const conn: any = new (TikTokLiveConnection as any)(cleanUsername, {
+    if (!TikTokLiveConnectionClass) {
+      throw new Error('Módulo TikTokLiveConnection não encontrado no servidor');
+    }
+
+    const conn = new TikTokLiveConnectionClass(cleanUsername, {
       processInitialData: false,
       enableExtendedGiftInfo: true,
       requestPollingIntervalMs: 1000,
@@ -805,44 +816,29 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
     await conn.connect();
     return { success: true, message: `Conectado à live de @${cleanUsername}!` };
   } catch (error: any) {
-    let rawError = error?.message || 'Falha ao conectar no TikTok';
-    let userFriendlyMsg = rawError;
-
-    if (rawError.includes("isn't online") || rawError.includes("offline") || rawError.includes("Room ID") || rawError.includes("not found")) {
-      userFriendlyMsg = `A live de @${cleanUsername} não foi encontrada ou ainda está offline no TikTok. Inicie a live pelo aplicativo do TikTok e tente novamente.`;
-    } else if (rawError.includes("rate limit") || rawError.includes("too many requests")) {
-      userFriendlyMsg = `Limite temporário de requisições do TikTok atingido. Aguarde alguns segundos e reconecte.`;
-    }
-
+    const errorText = error?.message || 'Falha ao conectar no TikTok';
     connectionStatus = 'error';
-    lastErrorMessage = userFriendlyMsg;
+    lastErrorMessage = errorText;
     broadcastToClients({
       type: 'status',
       status: 'error',
       username: cleanUsername,
-      lastError: userFriendlyMsg,
+      lastError: errorText,
     });
-    return { success: false, message: userFriendlyMsg };
+    return { success: false, message: errorText };
   }
 }
 
-// Connect to TikTok Live Endpoint (Non-blocking: responde instantaneamente e conecta em background)
-app.post('/api/tiktok/connect', (req: Request, res: Response) => {
+// Connect to TikTok Live Endpoint
+app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
   const { username } = req.body;
   const targetUser = username && typeof username === 'string' && username.trim() ? username : 'leonardosutello';
-  const cleanUsername = targetUser.replace(/^@/, '').trim();
-
-  // Inicia a tentativa de conexão em segundo plano sem travar a requisição HTTP
-  connectToTikTok(cleanUsername).catch((err) => {
-    console.warn(`[TikTok] Erro na conexão em background de @${cleanUsername}:`, err);
-  });
-
-  return res.json({
-    success: true,
-    status: 'connecting',
-    username: cleanUsername,
-    message: `Iniciando conexão com a LIVE de @${cleanUsername}...`,
-  });
+  const result = await connectToTikTok(targetUser);
+  if (result.success) {
+    return res.json(result);
+  } else {
+    return res.status(500).json({ error: result.message });
+  }
 });
 
 // Disconnect from TikTok Live
