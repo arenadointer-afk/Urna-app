@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Candidate": {
+      "title": "Candidate",
+      "description": "Definition of a political or custom candidate in the battle",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 32 },
+        "number": { "type": "string", "maxLength": 10 },
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "maxLength": 50 },
+        "party": { "type": "string", "maxLength": 50 },
+        "coalition": { "type": "string", "maxLength": 100 },
+        "vice": { "type": "string", "maxLength": 100 },
+        "color": { "type": "string", "maxLength": 20 },
+        "colorClass": { "type": "string", "maxLength": 100 },
+        "bgGradient": { "type": "string", "maxLength": 100 },
+        "photoUrl": { "type": "string", "maxLength": 1000 },
+        "primaryGift": { "type": "object" },
+        "bonusGifts": { "type": "array" }
+      },
+      "required": ["id", "number", "name", "role", "party", "photoUrl"]
+    },
+    "GameState": {
+      "title": "GameState",
+      "description": "Global synchronized state of the current live round, scores, candidates and timer",
+      "type": "object",
+      "properties": {
+        "leftCandidate": { "$ref": "Candidate" },
+        "rightCandidate": { "$ref": "Candidate" },
+        "roundNumber": { "type": "number" },
+        "roundDuration": { "type": "number" },
+        "timeLeft": { "type": "number" },
+        "isPaused": { "type": "boolean" },
+        "leftPoints": { "type": "number" },
+        "rightPoints": { "type": "number" },
+        "leftGiftsCount": { "type": "number" },
+        "rightGiftsCount": { "type": "number" },
+        "leftCommentProgress": { "type": "number" },
+        "rightCommentProgress": { "type": "number" },
+        "victoryScore": { "type": "object" },
+        "lastLeftUser": { "type": "string", "maxLength": 100 },
+        "lastLeftText": { "type": "string", "maxLength": 150 },
+        "lastRightUser": { "type": "string", "maxLength": 100 },
+        "lastRightText": { "type": "string", "maxLength": 150 },
+        "isRoundOver": { "type": "boolean" },
+        "winner": { "type": "string", "maxLength": 20 },
+        "resetCountdown": { "type": "number" },
+        "tiktokUsername": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["roundNumber", "roundDuration", "timeLeft", "isPaused", "leftPoints", "rightPoints", "victoryScore"]
+    },
+    "LiveEvent": {
+      "title": "LiveEvent",
+      "description": "Real-time action events such as votes, gifts, comments, and alerts for instant synchronization across devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "type": { "type": "string", "maxLength": 32 },
+        "side": { "type": "string", "maxLength": 16 },
+        "amount": { "type": "number" },
+        "giftName": { "type": "string", "maxLength": 100 },
+        "giftIcon": { "type": "string", "maxLength": 20 },
+        "username": { "type": "string", "maxLength": 100 },
+        "comment": { "type": "string", "maxLength": 300 },
+        "isEpic": { "type": "boolean" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "type", "timestamp"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Live chat and gift history messages displayed on the screen",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 64 },
+        "username": { "type": "string", "maxLength": 100 },
+        "avatar": { "type": "string", "maxLength": 1000 },
+        "text": { "type": "string", "maxLength": 300 },
+        "side": { "type": "string", "maxLength": 16 },
+        "timestamp": { "type": "number" },
+        "isGift": { "type": "boolean" },
+        "giftIcon": { "type": "string", "maxLength": 20 },
+        "points": { "type": "number" }
+      },
+      "required": ["id", "username", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/game_state/{stateId}": {
+      "schema": "GameState",
+      "description": "Stores the central live game state, synchronized across all viewer devices, admin panels, and OBS overlays"
+    },
+    "/live_events/{eventId}": {
+      "schema": "LiveEvent",
+      "description": "Stream of live battle events (votes, gifts, ticks) pushed in real-time"
+    },
+    "/chat_messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Live feed of comments and gift alerts"
+    }
+  }
+}

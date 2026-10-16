@@ -12,11 +12,19 @@ export const ShareLinksModal: React.FC<ShareLinksModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const origin =
-    typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null'
-      ? window.location.origin
-      : 'https://ais-dev-jraka4om4khnpiiqp4et5n-265581544198.us-east5.run.app';
+  const getCleanOrigin = () => {
+    if (typeof window === 'undefined') return '';
+    try {
+      if (window.location.origin && window.location.origin !== 'null') {
+        return window.location.origin;
+      }
+      return window.location.href.split('?')[0].split('#')[0];
+    } catch (e) {
+      return '';
+    }
+  };
 
+  const origin = getCleanOrigin();
   const publicLiveUrl = `${origin}?mode=live`;
   const adminUrl = `${origin}?mode=admin`;
 

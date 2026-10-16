@@ -44,6 +44,7 @@ import {
   Activity,
   Send,
   Terminal,
+  Plus,
 } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -1366,6 +1367,24 @@ tiktokLiveConnection.on('gift', data => {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Status do Firebase Firestore */}
+                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <div>
+                      <span className="font-black text-emerald-400 uppercase tracking-wide block text-[11px]">
+                        ☁️ Firebase Firestore em Nuvem Ativo
+                      </span>
+                      <span className="text-[10px] text-emerald-200/80">
+                        Fotos, nomes, tempo, rodadas e presentes sincronizados em tempo real entre todos os aparelhos e links públicos (sem login).
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-900 text-emerald-200 font-bold border border-emerald-700 shrink-0">
+                    Sincronizado
+                  </span>
                 </div>
 
                 {/* Form de Conexão com Perfil Fixo @leonardosutello */}

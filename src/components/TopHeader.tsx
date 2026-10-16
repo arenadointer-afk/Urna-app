@@ -71,6 +71,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <span className="text-[10px] font-black tracking-wider text-amber-400 uppercase">
             RODADA #{roundNumber}
           </span>
+          <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600/50 uppercase font-black tracking-tight flex items-center gap-0.5">
+            <span>☁️</span> Nuvem
+          </span>
         </div>
 
         <div className="flex items-center gap-2 pr-1">

@@ -46,6 +46,14 @@ import {
   broadcastSync,
   subscribeToSync,
 } from './utils/syncStorage';
+import {
+  saveGameStateToFirestore,
+  subscribeToGameStateFromFirestore,
+  pushLiveEventToFirestore,
+  subscribeToLiveEventsFromFirestore,
+  pushChatMessageToFirestore,
+  subscribeToChatMessagesFromFirestore,
+} from './utils/firebase';
 
 export default function App() {
   // Preset & Candidates (Local-First + Server-Sync: Persistem com foto e nome no F5)
@@ -355,6 +363,54 @@ export default function App() {
       });
   }, [applyServerState]);
 
+  // 3.1 Sincronização em Nuvem em Tempo Real via Firebase Firestore (Multi-dispositivos, Celular, OBS e Link Público)
+  useEffect(() => {
+    const unsubscribeState = subscribeToGameStateFromFirestore((cloudState) => {
+      if (cloudState) {
+        applyServerState(cloudState);
+      }
+    });
+
+    const unsubscribeEvents = subscribeToLiveEventsFromFirestore((event) => {
+      if (event.type === 'vote' || event.type === 'gift') {
+        playVoteSound();
+        spawnReaction(event.giftIcon || '🌹', event.side || 'left');
+        if (event.side === 'left') {
+          setLastLeftVoteTimestamp(Date.now());
+        } else {
+          setLastRightVoteTimestamp(Date.now());
+        }
+        if (event.isEpic) {
+          setEpicGift({
+            id: Date.now(),
+            username: event.username,
+            giftName: event.giftName,
+            giftIcon: event.giftIcon,
+            points: event.amount,
+            candidateNumber: event.side === 'left' ? leftCandidate.number : rightCandidate.number,
+            candidateName: event.side === 'left' ? leftCandidate.name : rightCandidate.name,
+            side: event.side,
+          });
+        }
+      } else if (event.type === 'round_restart') {
+        setIsRoundOver(false);
+        setWinner(null);
+      }
+    });
+
+    const unsubscribeChat = subscribeToChatMessagesFromFirestore((msgs) => {
+      if (Array.isArray(msgs) && msgs.length > 0) {
+        setChatMessages(msgs);
+      }
+    });
+
+    return () => {
+      unsubscribeState();
+      unsubscribeEvents();
+      unsubscribeChat();
+    };
+  }, [applyServerState, spawnReaction, leftCandidate.number, leftCandidate.name, rightCandidate.number, rightCandidate.name]);
+
   // 4. Conexão SSE para sincronização em tempo real entre todas as telas, OBS e público
   useEffect(() => {
     let eventSource: EventSource | null = null;
@@ -514,7 +570,7 @@ export default function App() {
     }
   };
 
-  // Main Vote Handler: salva no servidor
+  // Main Vote Handler: salva no Firebase Firestore e no servidor
   const handleVote = useCallback(
     async (
       side: 'left' | 'right',
@@ -523,30 +579,121 @@ export default function App() {
       giftIcon?: string,
       username?: string
     ) => {
+      const user = username || '@fa_live';
+      const isGift = Boolean(giftName && giftName !== 'Manual' && !giftName.includes('Comentário'));
+      const actionText = isGift
+        ? `${giftName || 'Presente'} • +${amount} pontos`
+        : `${giftName || 'Voto'} • +${amount} ponto`;
+
+      let newLeftPoints = leftPoints;
+      let newRightPoints = rightPoints;
+      let newLeftGifts = leftGiftsCount;
+      let newRightGifts = rightGiftsCount;
+
+      if (side === 'left') {
+        newLeftPoints += amount;
+        if (isGift) newLeftGifts += (amount > 1 ? amount : 1);
+        setLeftPoints(newLeftPoints);
+        setLeftGiftsCount(newLeftGifts);
+        setLastLeftUser(user);
+        setLastLeftText(actionText);
+        setLastLeftVoteTimestamp(Date.now());
+      } else {
+        newRightPoints += amount;
+        if (isGift) newRightGifts += (amount > 1 ? amount : 1);
+        setRightPoints(newRightPoints);
+        setRightGiftsCount(newRightGifts);
+        setLastRightUser(user);
+        setLastRightText(actionText);
+        setLastRightVoteTimestamp(Date.now());
+      }
+
+      playVoteSound();
+      const icon = giftIcon || (side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon);
+      spawnReaction(icon, side);
+
+      if (amount >= 10) {
+        setEpicGift({
+          id: Date.now(),
+          username: user,
+          giftName: giftName || 'Super Presente',
+          giftIcon: icon,
+          points: amount,
+          candidateNumber: side === 'left' ? leftCandidate.number : rightCandidate.number,
+          candidateName: side === 'left' ? leftCandidate.name : rightCandidate.name,
+          side,
+        });
+      }
+
+      // 1. Sincroniza em tempo real no Firebase Firestore para todos os aparelhos
+      pushLiveEventToFirestore({
+        type: isGift ? 'gift' : 'vote',
+        side,
+        amount,
+        giftName,
+        giftIcon: icon,
+        username: user,
+        isEpic: amount >= 10,
+      }).catch(() => {});
+
+      saveGameStateToFirestore({
+        leftPoints: newLeftPoints,
+        rightPoints: newRightPoints,
+        leftGiftsCount: newLeftGifts,
+        rightGiftsCount: newRightGifts,
+        lastLeftUser: side === 'left' ? user : lastLeftUser,
+        lastLeftText: side === 'left' ? actionText : lastLeftText,
+        lastRightUser: side === 'right' ? user : lastRightUser,
+        lastRightText: side === 'right' ? actionText : lastRightText,
+      }).catch(() => {});
+
+      pushChatMessageToFirestore({
+        username: user,
+        text: isGift ? `${giftName} (+${amount} pontos)` : `${side === 'left' ? leftCandidate.number : rightCandidate.number}`,
+        side,
+        isGift,
+        giftIcon: icon,
+        points: amount,
+      }).catch(() => {});
+
+      // 2. Envia para o backend se disponível
       try {
         await fetch('/api/vote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ side, amount, giftName, giftIcon, username }),
+          body: JSON.stringify({ side, amount, giftName, giftIcon: icon, username: user }),
         });
       } catch (e) {
-        console.error('Erro ao enviar voto pro servidor', e);
+        // Fallback silencioso se offline
       }
     },
-    []
+    [leftCandidate, rightCandidate, leftPoints, rightPoints, leftGiftsCount, rightGiftsCount, lastLeftUser, lastLeftText, lastRightUser, lastRightText, spawnReaction]
   );
 
-  // Manual Chat Message: salva no servidor
+  // Manual Chat Message: salva no Firebase Firestore e no servidor
   const handleUserChatMessage = useCallback(
     async (text: string, customAuthor?: string) => {
+      const user = customAuthor || '@Voce';
+      pushChatMessageToFirestore({
+        username: user,
+        text,
+        side: 'neutral',
+      }).catch(() => {});
+
+      pushLiveEventToFirestore({
+        type: 'chat',
+        comment: text,
+        username: user,
+      }).catch(() => {});
+
       try {
         await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text, username: customAuthor || '@Voce' }),
+          body: JSON.stringify({ text, username: user }),
         });
       } catch (e) {
-        console.error('Erro ao enviar mensagem pro chat', e);
+        // Fallback silencioso se offline
       }
     },
     []
@@ -578,10 +725,33 @@ export default function App() {
     }
   };
 
-  // Atualizar Candidato: envia pro servidor para salvar no disco e sincronizar com o público
+  // Atualizar Candidato: salva no Firebase Firestore e envia pro servidor para sincronizar todos os aparelhos
   const handleUpdateCandidate = async (side: 'left' | 'right', candidate: Candidate) => {
-    if (side === 'left') setLeftCandidate(candidate);
-    else setRightCandidate(candidate);
+    if (side === 'left') {
+      setLeftCandidate(candidate);
+      saveCandidate('left', candidate);
+    } else {
+      setRightCandidate(candidate);
+      saveCandidate('right', candidate);
+    }
+
+    const stateToSave = {
+      leftCandidate: side === 'left' ? candidate : leftCandidate,
+      rightCandidate: side === 'right' ? candidate : rightCandidate,
+      roundNumber,
+      roundDuration,
+      timeLeft,
+      isPaused,
+      leftPoints,
+      rightPoints,
+      leftGiftsCount,
+      rightGiftsCount,
+      victoryScore,
+    };
+
+    saveGameStateToFirestore(stateToSave).catch((err) =>
+      console.warn('Erro ao salvar candidato no Firestore:', err)
+    );
 
     try {
       await fetch('/api/candidate', {
@@ -594,10 +764,36 @@ export default function App() {
     }
   };
 
-  // Preset Selection: envia pro servidor
+  // Preset Selection: salva no Firebase Firestore e no servidor
   const handleSelectPreset = async (preset: PresetDuel) => {
     setLeftCandidate(preset.left);
     setRightCandidate(preset.right);
+    saveCandidate('left', preset.left);
+    saveCandidate('right', preset.right);
+    setLeftPoints(0);
+    setRightPoints(0);
+    setLeftGiftsCount(0);
+    setRightGiftsCount(0);
+    setTimeLeft(roundDuration);
+
+    const stateToSave = {
+      leftCandidate: preset.left,
+      rightCandidate: preset.right,
+      leftPoints: 0,
+      rightPoints: 0,
+      leftGiftsCount: 0,
+      rightGiftsCount: 0,
+      timeLeft: roundDuration,
+      roundDuration,
+      roundNumber,
+      isPaused: false,
+      victoryScore,
+    };
+
+    saveGameStateToFirestore(stateToSave).catch((err) =>
+      console.warn('Erro ao salvar preset no Firestore:', err)
+    );
+
     try {
       await fetch('/api/candidates', {
         method: 'POST',
@@ -609,8 +805,34 @@ export default function App() {
     }
   };
 
-  // Reiniciar Rodada no servidor
+  // Reiniciar Rodada no Firebase Firestore e no servidor
   const handleRestartRound = async () => {
+    setLeftPoints(0);
+    setRightPoints(0);
+    setLeftGiftsCount(0);
+    setRightGiftsCount(0);
+    setLeftCommentProgress(0);
+    setRightCommentProgress(0);
+    setIsRoundOver(false);
+    setWinner(null);
+    setTimeLeft(roundDuration);
+    setResetCountdown(5);
+
+    saveGameStateToFirestore({
+      leftPoints: 0,
+      rightPoints: 0,
+      leftGiftsCount: 0,
+      rightGiftsCount: 0,
+      leftCommentProgress: 0,
+      rightCommentProgress: 0,
+      isRoundOver: false,
+      winner: 'none',
+      timeLeft: roundDuration,
+      resetCountdown: 5,
+    }).catch(() => {});
+
+    pushLiveEventToFirestore({ type: 'round_restart' }).catch(() => {});
+
     try {
       await fetch('/api/reset-round', { method: 'POST' });
     } catch (e) {
@@ -622,10 +844,18 @@ export default function App() {
     await handleRestartRound();
   };
 
-  // Atualizar Duração da Rodada no servidor
+  // Atualizar Duração da Rodada no Firebase Firestore e no servidor
   const handleChangeRoundDuration = async (d: number) => {
     setRoundDuration(d);
     setTimeLeft(d);
+    saveRoundDuration(d);
+    saveTimeLeft(d);
+
+    saveGameStateToFirestore({
+      roundDuration: d,
+      timeLeft: d,
+    }).catch(() => {});
+
     try {
       await fetch('/api/duration', {
         method: 'POST',
@@ -637,8 +867,40 @@ export default function App() {
     }
   };
 
-  // Pausar / Continuar no servidor
+  // Adicionar Tempo (+15s, +30s, +60s, +120s)
+  const handleAddTime = async (seconds: number) => {
+    const nextTime = timeLeft + seconds;
+    const nextDuration = nextTime > roundDuration ? nextTime : roundDuration;
+    setTimeLeft(nextTime);
+    setRoundDuration(nextDuration);
+    saveTimeLeft(nextTime);
+    saveRoundDuration(nextDuration);
+
+    saveGameStateToFirestore({
+      timeLeft: nextTime,
+      roundDuration: nextDuration,
+    }).catch(() => {});
+
+    try {
+      await fetch('/api/time/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seconds }),
+      });
+    } catch (e) {}
+  };
+
+  // Pausar / Continuar no Firebase Firestore e no servidor
   const handleTogglePause = async () => {
+    const next = !isPaused;
+    setIsPaused(next);
+    saveIsPaused(next);
+
+    saveGameStateToFirestore({
+      isPaused: next,
+      timeLeft,
+    }).catch(() => {});
+
     try {
       await fetch('/api/pause', { method: 'POST' });
     } catch (e) {
@@ -649,6 +911,12 @@ export default function App() {
   // Atualizar e Zerar Placar Geral de Vitórias
   const handleUpdateVictoryScore = async (newScore: VictoryScore) => {
     setVictoryScore(newScore);
+    saveVictoryScore(newScore);
+
+    saveGameStateToFirestore({
+      victoryScore: newScore,
+    }).catch(() => {});
+
     try {
       await fetch('/api/victory-score', {
         method: 'POST',
@@ -665,6 +933,14 @@ export default function App() {
       'Deseja realmente zerar o placar geral de vitórias da série?'
     );
     if (confirmed) {
+      const resetScore = { left: 0, right: 0 };
+      setVictoryScore(resetScore);
+      saveVictoryScore(resetScore);
+
+      saveGameStateToFirestore({
+        victoryScore: resetScore,
+      }).catch(() => {});
+
       try {
         await fetch('/api/reset-series', { method: 'POST' });
       } catch (e) {
@@ -851,6 +1127,7 @@ export default function App() {
         onSelectPreset={handleSelectPreset}
         roundDuration={roundDuration}
         onChangeRoundDuration={handleChangeRoundDuration}
+        onAddTime={handleAddTime}
         isPaused={isPaused}
         onTogglePause={handleTogglePause}
         onRestartRound={handleRestartRound}

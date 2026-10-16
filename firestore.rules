@@ -1,0 +1,77 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all unknown collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCandidate(candidate) {
+      return candidate is map &&
+        candidate.keys().hasAll(['id', 'number', 'name', 'role', 'party', 'photoUrl']) &&
+        candidate.id is string && candidate.id.size() <= 32 &&
+        candidate.number is string && candidate.number.size() <= 10 &&
+        candidate.name is string && candidate.name.size() <= 100 &&
+        candidate.role is string && candidate.role.size() <= 50 &&
+        candidate.party is string && candidate.party.size() <= 50 &&
+        candidate.photoUrl is string && candidate.photoUrl.size() <= 1000;
+    }
+
+    function isValidGameState(data) {
+      return data is map &&
+        data.keys().hasAll(['roundNumber', 'roundDuration', 'timeLeft', 'isPaused', 'leftPoints', 'rightPoints', 'victoryScore']) &&
+        data.roundNumber is number && data.roundNumber >= 1 &&
+        data.roundDuration is number && data.roundDuration >= 5 &&
+        data.timeLeft is number && data.timeLeft >= 0 &&
+        data.isPaused is bool &&
+        data.leftPoints is number && data.leftPoints >= 0 &&
+        data.rightPoints is number && data.rightPoints >= 0 &&
+        data.victoryScore is map &&
+        data.victoryScore.left is number &&
+        data.victoryScore.right is number;
+    }
+
+    function isValidLiveEvent(data) {
+      return data is map &&
+        data.keys().hasAll(['id', 'type', 'timestamp']) &&
+        data.id is string && data.id.size() <= 64 &&
+        data.type is string && data.type.size() <= 32 &&
+        data.timestamp is number;
+    }
+
+    function isValidChatMessage(data) {
+      return data is map &&
+        data.keys().hasAll(['id', 'username', 'text', 'timestamp']) &&
+        data.id is string && data.id.size() <= 64 &&
+        data.username is string && data.username.size() <= 100 &&
+        data.text is string && data.text.size() <= 300 &&
+        data.timestamp is number;
+    }
+
+    // Game state: Public read so any spectator, mobile device, or OBS overlay can track the battle without login
+    match /game_state/{stateId} {
+      allow get, list: if isValidId(stateId);
+      allow create, update: if isValidId(stateId) && isValidGameState(request.resource.data);
+      allow delete: if false;
+    }
+
+    // Real-time battle events (votes, gifts, ticks)
+    match /live_events/{eventId} {
+      allow get, list: if true;
+      allow create: if isValidId(eventId) && isValidLiveEvent(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Live chat messages
+    match /chat_messages/{messageId} {
+      allow get, list: if true;
+      allow create: if isValidId(messageId) && isValidChatMessage(request.resource.data);
+      allow update, delete: if false;
+    }
+  }
+}

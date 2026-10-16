@@ -4,6 +4,8 @@ import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
 const require = createRequire(import.meta.url);
 let TikTokLiveConnectionClass: any = null;
@@ -17,6 +19,20 @@ try {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const STATE_FILE = path.resolve(__dirname, 'server_state.json');
+
+// Initialize Firebase Firestore for Cloud Persistence across devices
+let firestoreDb: any = null;
+try {
+  const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const fbApp = !getApps().length ? initializeApp(rawConfig) : getApps()[0];
+    firestoreDb = getFirestore(fbApp, rawConfig.firestoreDatabaseId);
+    console.log('[Server] Firebase Firestore conectado com sucesso!');
+  }
+} catch (e) {
+  console.warn('[Server] Falha ao inicializar Firebase Firestore:', e);
+}
 
 const app = express();
 const PORT = 3000;
@@ -168,7 +184,7 @@ try {
   console.warn('[Server] Falha ao ler server_state.json', e);
 }
 
-// Persist state to disk safely
+// Persist state to disk and Firestore safely
 let saveTimeout: any = null;
 function saveStateToDisk() {
   if (saveTimeout) clearTimeout(saveTimeout);
@@ -178,7 +194,16 @@ function saveStateToDisk() {
     } catch (e) {
       console.error('[Server] Erro ao salvar estado no disco:', e);
     }
-  }, 500);
+
+    if (firestoreDb) {
+      try {
+        const docRef = doc(firestoreDb, 'game_state', 'current');
+        setDoc(docRef, { ...serverState, updatedAt: Date.now() }, { merge: true }).catch((err) => {
+          console.warn('[Server] Falha ao atualizar Firestore:', err?.message || err);
+        });
+      } catch (e) {}
+    }
+  }, 400);
 }
 
 // Active SSE client connections
@@ -247,6 +272,27 @@ function addVote(
   serverState.chatMessages = [...serverState.chatMessages.slice(-25), newMsg];
 
   saveStateToDisk();
+
+  if (firestoreDb) {
+    try {
+      const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const evtRef = doc(firestoreDb, 'live_events', id);
+      setDoc(evtRef, {
+        id,
+        type: isGift ? 'gift' : 'vote',
+        side,
+        amount,
+        giftName: giftName || '',
+        giftIcon: newMsg.giftIcon || '🎁',
+        username: user,
+        isEpic: amount >= 10,
+        timestamp: Date.now(),
+      }).catch(() => {});
+
+      const msgRef = doc(firestoreDb, 'chat_messages', newMsg.id);
+      setDoc(msgRef, newMsg).catch(() => {});
+    } catch (e) {}
+  }
 
   broadcastToClients({
     type: 'VOTE_TRIGGER',
@@ -317,6 +363,20 @@ function addComment(text: string, username?: string) {
   }
 
   saveStateToDisk();
+
+  if (firestoreDb) {
+    try {
+      const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const evtRef = doc(firestoreDb, 'live_events', id);
+      setDoc(evtRef, {
+        id,
+        type: 'chat',
+        comment: trimmed,
+        username: author,
+        timestamp: Date.now(),
+      }).catch(() => {});
+    } catch (e) {}
+  }
 
   broadcastToClients({
     type: 'CHAT_TRIGGER',
@@ -862,6 +922,21 @@ async function startServer() {
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
+  }
+
+  // Carrega estado mais recente gravado no Firebase Firestore
+  if (firestoreDb) {
+    try {
+      const docRef = doc(firestoreDb, 'game_state', 'current');
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        const cloudData = snap.data();
+        serverState = { ...serverState, ...cloudData };
+        console.log('[Server] Estado restaurado do Firebase Firestore com sucesso!');
+      }
+    } catch (e) {
+      console.warn('[Server] Falha ao carregar estado do Firestore na inicialização:', e);
+    }
   }
 
   app.listen(PORT, HOST, () => {
