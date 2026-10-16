@@ -13,27 +13,25 @@ service cloud.firestore {
 
     function isValidCandidate(candidate) {
       return candidate is map &&
-        candidate.keys().hasAll(['id', 'number', 'name', 'role', 'party', 'photoUrl']) &&
+        candidate.keys().hasAll(['id', 'number', 'name']) &&
         candidate.id is string && candidate.id.size() <= 32 &&
-        candidate.number is string && candidate.number.size() <= 10 &&
-        candidate.name is string && candidate.name.size() <= 100 &&
-        candidate.role is string && candidate.role.size() <= 50 &&
-        candidate.party is string && candidate.party.size() <= 50 &&
-        candidate.photoUrl is string && candidate.photoUrl.size() <= 1000;
+        candidate.number is string && candidate.number.size() <= 20 &&
+        candidate.name is string && candidate.name.size() <= 200 &&
+        (!('photoUrl' in candidate) || (candidate.photoUrl is string && candidate.photoUrl.size() <= 1000000)) &&
+        (!('role' in candidate) || (candidate.role is string && candidate.role.size() <= 100)) &&
+        (!('party' in candidate) || (candidate.party is string && candidate.party.size() <= 100));
     }
 
     function isValidGameState(data) {
       return data is map &&
-        data.keys().hasAll(['roundNumber', 'roundDuration', 'timeLeft', 'isPaused', 'leftPoints', 'rightPoints', 'victoryScore']) &&
-        data.roundNumber is number && data.roundNumber >= 1 &&
-        data.roundDuration is number && data.roundDuration >= 5 &&
-        data.timeLeft is number && data.timeLeft >= 0 &&
-        data.isPaused is bool &&
-        data.leftPoints is number && data.leftPoints >= 0 &&
-        data.rightPoints is number && data.rightPoints >= 0 &&
-        data.victoryScore is map &&
-        data.victoryScore.left is number &&
-        data.victoryScore.right is number;
+        (!('roundNumber' in data) || (data.roundNumber is number && data.roundNumber >= 1)) &&
+        (!('roundDuration' in data) || (data.roundDuration is number && data.roundDuration >= 5)) &&
+        (!('timeLeft' in data) || (data.timeLeft is number && data.timeLeft >= 0)) &&
+        (!('isPaused' in data) || data.isPaused is bool) &&
+        (!('leftPoints' in data) || (data.leftPoints is number && data.leftPoints >= 0)) &&
+        (!('rightPoints' in data) || (data.rightPoints is number && data.rightPoints >= 0)) &&
+        (!('leftCandidate' in data) || isValidCandidate(data.leftCandidate)) &&
+        (!('rightCandidate' in data) || isValidCandidate(data.rightCandidate));
     }
 
     function isValidLiveEvent(data) {

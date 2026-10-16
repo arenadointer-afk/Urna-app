@@ -161,7 +161,7 @@ export default function App() {
 
     setFloatingItems((prev) => [
       ...prev.slice(-15),
-      { id, emoji, leftPercent, size, color: side === 'left' ? '#3b82f6' : '#ef4444' },
+      { id, emoji, leftPercent, size, color: side === 'left' ? '#ef4444' : '#3b82f6' },
     ]);
 
     setTimeout(() => {
@@ -734,6 +734,7 @@ export default function App() {
       setRightCandidate(candidate);
       saveCandidate('right', candidate);
     }
+    broadcastSync({ type: 'UPDATE_CANDIDATE', side, candidate });
 
     const stateToSave = {
       leftCandidate: side === 'left' ? candidate : leftCandidate,
@@ -770,6 +771,7 @@ export default function App() {
     setRightCandidate(preset.right);
     saveCandidate('left', preset.left);
     saveCandidate('right', preset.right);
+    broadcastSync({ type: 'UPDATE_ALL_CANDIDATES', left: preset.left, right: preset.right });
     setLeftPoints(0);
     setRightPoints(0);
     setLeftGiftsCount(0);

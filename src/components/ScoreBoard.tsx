@@ -126,14 +126,14 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
         {/* Dynamic Leader Status Badge */}
         <div className="my-1">
           {leader === 'left' && (
-            <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-blue-600/90 text-white font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-blue-400 shadow-lg shadow-blue-600/50 animate-bounce">
+            <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-red-600/90 text-white font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-red-400 shadow-lg shadow-red-600/50 animate-bounce">
               <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300" />
               <span>{leftCandidate.number} NA FRENTE!</span>
               <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300" />
             </div>
           )}
           {leader === 'right' && (
-            <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-red-600/90 text-white font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-red-400 shadow-lg shadow-red-600/50 animate-bounce">
+            <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-blue-600/90 text-white font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-blue-400 shadow-lg shadow-blue-600/50 animate-bounce">
               <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300" />
               <span>{rightCandidate.number} NA FRENTE!</span>
               <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300" />
@@ -150,31 +150,31 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
         {/* Big Scoreboards: Points and Percentage */}
         <div className="grid grid-cols-2 gap-2 sm:gap-3 w-full my-1 sm:my-1.5">
-          {/* Left Placard */}
-          <div className="flex flex-col items-center justify-center p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-blue-950/80 to-blue-900/40 border border-blue-500/40 shadow-inner min-w-0 overflow-hidden">
-            <span className="text-[10px] sm:text-xs font-black text-blue-300 tracking-tight truncate max-w-full text-center px-1">
+          {/* Left Placard (Red) */}
+          <div className="flex flex-col items-center justify-center p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-red-950/80 to-red-900/40 border border-red-500/40 shadow-inner min-w-0 overflow-hidden">
+            <span className="text-[10px] sm:text-xs font-black text-red-300 tracking-tight truncate max-w-full text-center px-1">
               {leftCandidate.name} ({leftCandidate.number})
             </span>
             <div className="flex items-baseline gap-1.5 sm:gap-2">
-              <span className="text-2xl sm:text-4xl font-black font-digital text-white drop-shadow-[0_2px_10px_rgba(59,130,246,0.6)]">
+              <span className="text-2xl sm:text-4xl font-black font-digital text-white drop-shadow-[0_2px_10px_rgba(239,68,68,0.6)]">
                 {leftPoints}
               </span>
-              <span className="text-base sm:text-xl font-black font-digital text-blue-400">
+              <span className="text-base sm:text-xl font-black font-digital text-red-400">
                 {leftPct}%
               </span>
             </div>
           </div>
 
-          {/* Right Placard */}
-          <div className="flex flex-col items-center justify-center p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-red-950/80 to-red-900/40 border border-red-500/40 shadow-inner min-w-0 overflow-hidden">
-            <span className="text-[10px] sm:text-xs font-black text-red-300 tracking-tight truncate max-w-full text-center px-1">
+          {/* Right Placard (Blue) */}
+          <div className="flex flex-col items-center justify-center p-1.5 sm:p-2 rounded-xl bg-gradient-to-br from-blue-950/80 to-blue-900/40 border border-blue-500/40 shadow-inner min-w-0 overflow-hidden">
+            <span className="text-[10px] sm:text-xs font-black text-blue-300 tracking-tight truncate max-w-full text-center px-1">
               {rightCandidate.name} ({rightCandidate.number})
             </span>
             <div className="flex items-baseline gap-1.5 sm:gap-2">
-              <span className="text-2xl sm:text-4xl font-black font-digital text-white drop-shadow-[0_2px_10px_rgba(239,68,68,0.6)]">
+              <span className="text-2xl sm:text-4xl font-black font-digital text-white drop-shadow-[0_2px_10px_rgba(59,130,246,0.6)]">
                 {rightPoints}
               </span>
-              <span className="text-base sm:text-xl font-black font-digital text-red-400">
+              <span className="text-base sm:text-xl font-black font-digital text-blue-400">
                 {rightPct}%
               </span>
             </div>
@@ -184,7 +184,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
         {/* Tug of war progress bar */}
         <div className="w-full h-4 sm:h-5 rounded-full overflow-hidden flex bg-zinc-900 border-2 border-zinc-700 shadow-inner mt-1">
           <div
-            className="h-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-300 flex items-center justify-start pl-2"
+            className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-300 flex items-center justify-start pl-2"
             style={{ width: `${leftPct}%` }}
           >
             {leftPct > 12 && (
@@ -194,7 +194,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             )}
           </div>
           <div
-            className="h-full bg-gradient-to-l from-red-600 to-red-400 transition-all duration-300 flex items-center justify-end pr-2"
+            className="h-full bg-gradient-to-l from-blue-600 to-blue-400 transition-all duration-300 flex items-center justify-end pr-2"
             style={{ width: `${rightPct}%` }}
           >
             {rightPct > 12 && (

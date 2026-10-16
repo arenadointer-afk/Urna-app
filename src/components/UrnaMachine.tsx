@@ -109,11 +109,8 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   const formattedPercentage = percentage.toFixed(1).replace('.', ',');
   // Name and photo appear ONLY when the 2 digits have been typed!
   const hasFullDigits = Boolean(typedDigits[0] && typedDigits[1]);
-  const isRedTheme =
-    candidate.number === '13' ||
-    candidate.party === 'PT' ||
-    candidate.color?.includes('red') ||
-    candidate.color?.includes('dc2626');
+  // O lado esquerdo é SEMPRE VERMELHO e o lado direito é SEMPRE AZUL
+  const isRedTheme = candidate.id === 'left';
 
   return (
     <div className="flex-1 flex flex-col items-center min-w-0 max-w-[215px] sm:max-w-[250px]">
@@ -147,7 +144,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
               </span>
               <span
                 className={`text-[9px] font-digital font-black ${
-                  candidate.id === 'left' ? 'text-blue-400' : 'text-red-400'
+                  candidate.id === 'left' ? 'text-red-500' : 'text-blue-500'
                 }`}
               >
                 NÚMERO {candidate.number}

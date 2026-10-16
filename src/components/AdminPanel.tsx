@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Candidate,
   BotSettings,
@@ -217,14 +217,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   if (!isOpen) return null;
 
-  const currentEditingCandidate = editingSide === 'left' ? leftCandidate : rightCandidate;
+  const [formCandidate, setFormCandidate] = useState<Candidate>(
+    editingSide === 'left' ? leftCandidate : rightCandidate
+  );
+  const [candidateSavedFeedback, setCandidateSavedFeedback] = useState(false);
+  const debounceSaveTimerRef = useRef<any>(null);
+  const isEditingRef = useRef(false);
+
+  // Quando trocar de lado, atualiza os dados no formulário para o lado selecionado
+  React.useEffect(() => {
+    isEditingRef.current = false;
+    setFormCandidate(editingSide === 'left' ? leftCandidate : rightCandidate);
+  }, [editingSide]);
+
+  // Se trocar presets externamente quando não estiver digitando, sincroniza
+  React.useEffect(() => {
+    if (!isEditingRef.current) {
+      setFormCandidate(editingSide === 'left' ? leftCandidate : rightCandidate);
+    }
+  }, [leftCandidate, rightCandidate, editingSide]);
+
+  const currentEditingCandidate = formCandidate;
 
   const handleCandidateFieldChange = (field: keyof Candidate, value: any) => {
+    isEditingRef.current = true;
     const updated = {
-      ...currentEditingCandidate,
+      ...formCandidate,
       [field]: value,
     };
-    onUpdateCandidate(editingSide, updated);
+    setFormCandidate(updated);
+
+    // Auto-save com debounce de 450ms sem travar o teclado ou pular o cursor
+    if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current);
+    debounceSaveTimerRef.current = setTimeout(() => {
+      onUpdateCandidate(editingSide, updated);
+      isEditingRef.current = false;
+    }, 450);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,11 +264,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const rawDataUrl = event.target?.result as string;
       if (!rawDataUrl) return;
 
-      // Compress and resize image to 350x350 max so it saves instantly in localStorage & network
+      // Compress and resize image to 240x240 max with 0.78 quality so it transfers in <50ms and fits in Firestore
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_SIZE = 350;
+        const MAX_SIZE = 240;
         let width = img.width;
         let height = img.height;
 
@@ -261,7 +289,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
           handleCandidateFieldChange('photoUrl', compressedDataUrl);
         } else {
           handleCandidateFieldChange('photoUrl', rawDataUrl);
@@ -782,7 +810,7 @@ tiktokLiveConnection.on('gift', data => {
                 <button
                   type="button"
                   onClick={() => onInjectVotes('both', 1)}
-                  className="p-3 rounded-2xl bg-gradient-to-r from-blue-600 to-red-600 hover:brightness-110 text-white font-black text-xs flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transition-all active:scale-95"
+                  className="p-3 rounded-2xl bg-gradient-to-r from-red-600 to-blue-600 hover:brightness-110 text-white font-black text-xs flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transition-all active:scale-95"
                 >
                   <span className="text-lg">🚀</span>
                   <span>SAIR DO ZERO (+1 cada)</span>
@@ -812,54 +840,11 @@ tiktokLiveConnection.on('gift', data => {
 
               {/* Injetores Individuais de Voto */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                {/* Lado Esquerdo */}
-                <div className="p-3 rounded-2xl bg-blue-950/40 border border-blue-500/40 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-black text-blue-400 text-xs truncate">
-                      URNA {leftCandidate.number} ({leftCandidate.name})
-                    </span>
-                    <span className="text-xs">🟦</span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onInjectVotes('left', 1)}
-                      className="py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
-                    >
-                      +1 Voto
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onInjectVotes('left', 5)}
-                      className="py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
-                    >
-                      +5 Votos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onInjectVotes('left', 20)}
-                      className="py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-bold text-xs cursor-pointer active:scale-95"
-                    >
-                      +20 Votos
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => onInjectVotes('left', 100, true, 'Leão Lendário')}
-                    className="py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow"
-                  >
-                    <span>🦁</span>
-                    <span>Simular Baleia (+100 Votos)</span>
-                  </button>
-                </div>
-
-                {/* Lado Direito */}
+                {/* Lado Esquerdo (Vermelho) */}
                 <div className="p-3 rounded-2xl bg-red-950/40 border border-red-500/40 flex flex-col gap-2">
                   <div className="flex items-center justify-between">
                     <span className="font-black text-red-400 text-xs truncate">
-                      URNA {rightCandidate.number} ({rightCandidate.name})
+                      URNA {leftCandidate.number} ({leftCandidate.name})
                     </span>
                     <span className="text-xs">🟥</span>
                   </div>
@@ -867,21 +852,21 @@ tiktokLiveConnection.on('gift', data => {
                   <div className="grid grid-cols-3 gap-1.5">
                     <button
                       type="button"
-                      onClick={() => onInjectVotes('right', 1)}
+                      onClick={() => onInjectVotes('left', 1)}
                       className="py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer active:scale-95"
                     >
                       +1 Voto
                     </button>
                     <button
                       type="button"
-                      onClick={() => onInjectVotes('right', 5)}
+                      onClick={() => onInjectVotes('left', 5)}
                       className="py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer active:scale-95"
                     >
                       +5 Votos
                     </button>
                     <button
                       type="button"
-                      onClick={() => onInjectVotes('right', 20)}
+                      onClick={() => onInjectVotes('left', 20)}
                       className="py-1.5 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold text-xs cursor-pointer active:scale-95"
                     >
                       +20 Votos
@@ -890,8 +875,51 @@ tiktokLiveConnection.on('gift', data => {
 
                   <button
                     type="button"
+                    onClick={() => onInjectVotes('left', 100, true, 'Leão Lendário')}
+                    className="py-2 px-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-500 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow"
+                  >
+                    <span>🦁</span>
+                    <span>Simular Baleia (+100 Votos)</span>
+                  </button>
+                </div>
+
+                {/* Lado Direito (Azul) */}
+                <div className="p-3 rounded-2xl bg-blue-950/40 border border-blue-500/40 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-blue-400 text-xs truncate">
+                      URNA {rightCandidate.number} ({rightCandidate.name})
+                    </span>
+                    <span className="text-xs">🟦</span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onInjectVotes('right', 1)}
+                      className="py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      +1 Voto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onInjectVotes('right', 5)}
+                      className="py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      +5 Votos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onInjectVotes('right', 20)}
+                      className="py-1.5 rounded-xl bg-blue-700 hover:bg-blue-600 text-white font-bold text-xs cursor-pointer active:scale-95"
+                    >
+                      +20 Votos
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
                     onClick={() => onInjectVotes('right', 100, true, 'Galáxia Épica')}
-                    className="py-2 px-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow"
+                    className="py-2 px-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow"
                   >
                     <span>🌌</span>
                     <span>Simular Baleia (+100 Votos)</span>
@@ -904,18 +932,18 @@ tiktokLiveConnection.on('gift', data => {
           {/* TAB 2: MUDAR FOTOS & NOMES DOS CANDIDATOS */}
           {activeTab === 'candidates' && (
             <div className="space-y-4">
-              {/* Selector: Lado Esquerdo ou Lado Direito */}
+              {/* Selector: Lado Esquerdo (Vermelho) ou Lado Direito (Azul) */}
               <div className="flex rounded-2xl bg-slate-950 p-1 border border-slate-800">
                 <button
                   type="button"
                   onClick={() => setEditingSide('left')}
                   className={`flex-1 py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     editingSide === 'left'
-                      ? 'bg-blue-600 text-white shadow-lg'
+                      ? 'bg-red-600 text-white shadow-lg'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <span>🟦</span>
+                  <span>🟥</span>
                   <span>Candidato Esquerda ({leftCandidate.number})</span>
                 </button>
 
@@ -924,11 +952,11 @@ tiktokLiveConnection.on('gift', data => {
                   onClick={() => setEditingSide('right')}
                   className={`flex-1 py-2 px-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer ${
                     editingSide === 'right'
-                      ? 'bg-red-600 text-white shadow-lg'
+                      ? 'bg-blue-600 text-white shadow-lg'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  <span>🟥</span>
+                  <span>🟦</span>
                   <span>Candidato Direita ({rightCandidate.number})</span>
                 </button>
               </div>
@@ -965,6 +993,19 @@ tiktokLiveConnection.on('gift', data => {
                           className="hidden"
                         />
                       </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defaultUrl = editingSide === 'left'
+                            ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80'
+                            : 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=300&auto=format&fit=crop&q=80';
+                          handleCandidateFieldChange('photoUrl', defaultUrl);
+                        }}
+                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold cursor-pointer transition-all"
+                        title="Restaurar foto padrão"
+                      >
+                        Resetar Foto
+                      </button>
                     </div>
 
                     {/* Campo de URL da Imagem */}
@@ -986,16 +1027,39 @@ tiktokLiveConnection.on('gift', data => {
                 {/* Campos de Nome, Número e Partido */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-xs font-bold text-slate-300 block mb-1">
-                      Nome do Candidato:
-                    </label>
-                    <input
-                      type="text"
-                      value={currentEditingCandidate.name}
-                      onChange={(e) => handleCandidateFieldChange('name', e.target.value.toUpperCase())}
-                      placeholder="Ex: JAIR BOLSONARO"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-amber-400"
-                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-slate-300">
+                        Nome do Candidato:
+                      </label>
+                      {currentEditingCandidate.name && (
+                        <button
+                          type="button"
+                          onClick={() => handleCandidateFieldChange('name', '')}
+                          className="text-[10px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                        >
+                          Apagar Nome
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={currentEditingCandidate.name}
+                        onChange={(e) => handleCandidateFieldChange('name', e.target.value.toUpperCase())}
+                        placeholder="Digite o nome do candidato..."
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-amber-400 pr-8"
+                      />
+                      {currentEditingCandidate.name && (
+                        <button
+                          type="button"
+                          onClick={() => handleCandidateFieldChange('name', '')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full cursor-pointer text-xs"
+                          title="Apagar campo"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -1073,6 +1137,31 @@ tiktokLiveConnection.on('gift', data => {
                     />
                   </div>
                 </div>
+
+                {/* Botão de Salvar e Feedback */}
+                <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+                  <div className="text-[11px] text-slate-400">
+                    {candidateSavedFeedback ? (
+                      <span className="text-emerald-400 font-bold flex items-center gap-1.5 animate-fade-in">
+                        <Check className="w-4 h-4 stroke-[3]" /> Salvo e Sincronizado na Nuvem!
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">As alterações salvam automaticamente na nuvem Firebase.</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUpdateCandidate(editingSide, formCandidate);
+                      setCandidateSavedFeedback(true);
+                      setTimeout(() => setCandidateSavedFeedback(false), 2500);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-zinc-950 font-black text-xs flex items-center gap-1.5 shadow-lg active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                    <span>SALVAR CANDIDATO</span>
+                  </button>
+                </div>
               </div>
 
               {/* Galeria de Avatars Rápidos */}
@@ -1129,11 +1218,11 @@ tiktokLiveConnection.on('gift', data => {
                   </div>
 
                   <div className="flex items-center gap-2 font-digital font-black text-lg sm:text-xl">
-                    <span className="px-3 py-1 rounded-xl bg-blue-600 text-white shadow border border-blue-400">
+                    <span className="px-3 py-1 rounded-xl bg-red-600 text-white shadow border border-red-400">
                       {victoryScore.left}
                     </span>
                     <span className="text-yellow-400 font-sans">✕</span>
-                    <span className="px-3 py-1 rounded-xl bg-red-600 text-white shadow border border-red-400">
+                    <span className="px-3 py-1 rounded-xl bg-blue-600 text-white shadow border border-blue-400">
                       {victoryScore.right}
                     </span>
                   </div>
@@ -1144,7 +1233,7 @@ tiktokLiveConnection.on('gift', data => {
                     <button
                       type="button"
                       onClick={() => onUpdateVictoryScore({ ...victoryScore, left: victoryScore.left + 1 })}
-                      className="flex-1 py-1.5 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
+                      className="flex-1 py-1.5 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer active:scale-95"
                     >
                       +1 {leftCandidate.name.split(' ')[0]}
                     </button>
@@ -1161,7 +1250,7 @@ tiktokLiveConnection.on('gift', data => {
                     <button
                       type="button"
                       onClick={() => onUpdateVictoryScore({ ...victoryScore, right: victoryScore.right + 1 })}
-                      className="flex-1 py-1.5 px-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer active:scale-95"
+                      className="flex-1 py-1.5 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs cursor-pointer active:scale-95"
                     >
                       +1 {rightCandidate.name.split(' ')[0]}
                     </button>

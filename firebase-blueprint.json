@@ -15,7 +15,7 @@
         "color": { "type": "string", "maxLength": 20 },
         "colorClass": { "type": "string", "maxLength": 100 },
         "bgGradient": { "type": "string", "maxLength": 100 },
-        "photoUrl": { "type": "string", "maxLength": 1000 },
+        "photoUrl": { "type": "string", "maxLength": 300000 },
         "primaryGift": { "type": "object" },
         "bonusGifts": { "type": "array" }
       },

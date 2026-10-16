@@ -43,10 +43,10 @@ export const LiveChatFeed: React.FC<LiveChatFeedProps> = ({
           <span>CHAT DA LIVE & PRESENTES EM TEMPO REAL</span>
         </div>
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-600/40 font-bold">
+          <span className="px-2 py-0.5 rounded bg-red-900/60 text-red-300 border border-red-600/40 font-bold">
             Digite {leftCandidate.number}
           </span>
-          <span className="px-2 py-0.5 rounded bg-red-900/60 text-red-300 border border-red-600/40 font-bold">
+          <span className="px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-600/40 font-bold">
             Digite {rightCandidate.number}
           </span>
         </div>
@@ -65,8 +65,8 @@ export const LiveChatFeed: React.FC<LiveChatFeedProps> = ({
                 key={msg.id}
                 className={`p-1.5 rounded-lg flex items-center justify-between border animate-fade-in ${
                   msg.side === 'left'
-                    ? 'bg-blue-950/60 border-blue-500/50 text-blue-100'
-                    : 'bg-red-950/60 border-red-500/50 text-red-100'
+                    ? 'bg-red-950/60 border-red-500/50 text-red-100'
+                    : 'bg-blue-950/60 border-blue-500/50 text-blue-100'
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -85,8 +85,8 @@ export const LiveChatFeed: React.FC<LiveChatFeedProps> = ({
                 <span
                   className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
                     msg.side === 'left'
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-red-500 text-white'
+                      ? 'bg-red-500 text-white'
+                      : 'bg-blue-500 text-white'
                   }`}
                 >
                   +{msg.points} {msg.side === 'left' ? leftCandidate.number : rightCandidate.number}
@@ -113,9 +113,9 @@ export const LiveChatFeed: React.FC<LiveChatFeedProps> = ({
               <span
                 className={`font-semibold ${
                   msg.side === 'left'
-                    ? 'text-blue-300 font-extrabold'
-                    : msg.side === 'right'
                     ? 'text-red-300 font-extrabold'
+                    : msg.side === 'right'
+                    ? 'text-blue-300 font-extrabold'
                     : 'text-slate-200'
                 }`}
               >
@@ -125,8 +125,8 @@ export const LiveChatFeed: React.FC<LiveChatFeedProps> = ({
                 <span
                   className={`text-[8px] font-black px-1 rounded uppercase ml-auto ${
                     msg.side === 'left'
-                      ? 'bg-blue-900/80 text-blue-300'
-                      : 'bg-red-900/80 text-red-300'
+                      ? 'bg-red-900/80 text-red-300'
+                      : 'bg-blue-900/80 text-blue-300'
                   }`}
                 >
                   +1 {msg.side === 'left' ? leftCandidate.number : rightCandidate.number}

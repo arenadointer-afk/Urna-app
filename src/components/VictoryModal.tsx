@@ -48,7 +48,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
     fire(0.25, {
       spread: 26,
       startVelocity: 55,
-      colors: winner === 'left' ? ['#2563eb', '#60a5fa', '#fef08a'] : ['#dc2626', '#f87171', '#fef08a'],
+      colors: winner === 'left' ? ['#dc2626', '#f87171', '#fef08a'] : ['#2563eb', '#60a5fa', '#fef08a'],
     });
     fire(0.2, {
       spread: 60,
@@ -100,7 +100,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
             <div className="relative mb-2">
               <div
                 className={`w-20 h-20 rounded-full border-4 overflow-hidden shadow-xl ${
-                  winner === 'left' ? 'border-blue-500 shadow-blue-500/50' : 'border-red-500 shadow-red-500/50'
+                  winner === 'left' ? 'border-red-500 shadow-red-500/50' : 'border-blue-500 shadow-blue-500/50'
                 }`}
               >
                 <img
@@ -122,7 +122,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
 
             <h2
               className={`text-3xl font-black tracking-tight mt-1 uppercase font-digital ${
-                winner === 'left' ? 'text-blue-400 drop-shadow-[0_2px_15px_rgba(59,130,246,0.8)]' : 'text-red-400 drop-shadow-[0_2px_15px_rgba(239,68,68,0.8)]'
+                winner === 'left' ? 'text-red-400 drop-shadow-[0_2px_15px_rgba(239,68,68,0.8)]' : 'text-blue-400 drop-shadow-[0_2px_15px_rgba(59,130,246,0.8)]'
               }`}
             >
               {winningCandidate.number} - {winningCandidate.name}
@@ -134,13 +134,13 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         <div className="w-full grid grid-cols-2 gap-3 my-4 bg-slate-900/90 rounded-2xl p-3 border border-slate-800">
           <div
             className={`flex flex-col items-center p-2 rounded-xl ${
-              winner === 'left' ? 'bg-blue-950/80 border border-blue-500/50' : 'opacity-70'
+              winner === 'left' ? 'bg-red-950/80 border border-red-500/50' : 'opacity-70'
             }`}
           >
             <span className="text-[10px] font-bold text-slate-400 uppercase">
               {leftCandidate.name} ({leftCandidate.number})
             </span>
-            <span className="text-2xl font-black font-digital text-blue-400">
+            <span className="text-2xl font-black font-digital text-red-400">
               {leftPoints}
             </span>
             <span className="text-xs font-bold text-slate-300">{leftPct}% dos votos</span>
@@ -148,13 +148,13 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
 
           <div
             className={`flex flex-col items-center p-2 rounded-xl ${
-              winner === 'right' ? 'bg-red-950/80 border border-red-500/50' : 'opacity-70'
+              winner === 'right' ? 'bg-blue-950/80 border border-blue-500/50' : 'opacity-70'
             }`}
           >
             <span className="text-[10px] font-bold text-slate-400 uppercase">
               {rightCandidate.name} ({rightCandidate.number})
             </span>
-            <span className="text-2xl font-black font-digital text-red-400">
+            <span className="text-2xl font-black font-digital text-blue-400">
               {rightPoints}
             </span>
             <span className="text-xs font-bold text-slate-300">{rightPct}% dos votos</span>
@@ -168,15 +168,15 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
             <span>PLACAR GERAL DE VITÓRIAS</span>
           </div>
           <div className="flex items-center gap-4 font-digital font-black text-2xl">
-            <div className="flex items-center gap-1.5 text-blue-400">
+            <div className="flex items-center gap-1.5 text-red-400">
               <span className="text-xs text-slate-400">{leftCandidate.name.split(' ')[0]}:</span>
-              <span className="px-2.5 py-0.5 rounded-lg bg-blue-600/30 border border-blue-500 text-white">
+              <span className="px-2.5 py-0.5 rounded-lg bg-red-600/30 border border-red-500 text-white">
                 {victoryScore.left}
               </span>
             </div>
             <span className="text-yellow-400 text-xl font-sans font-bold">✕</span>
-            <div className="flex items-center gap-1.5 text-red-400">
-              <span className="px-2.5 py-0.5 rounded-lg bg-red-600/30 border border-red-500 text-white">
+            <div className="flex items-center gap-1.5 text-blue-400">
+              <span className="px-2.5 py-0.5 rounded-lg bg-blue-600/30 border border-blue-500 text-white">
                 {victoryScore.right}
               </span>
               <span className="text-xs text-slate-400">:{rightCandidate.name.split(' ')[0]}</span>

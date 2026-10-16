@@ -97,46 +97,48 @@ const GAME_STATE_DOC_ID = 'current';
 export async function saveGameStateToFirestore(state: any) {
   try {
     const docRef = doc(db, GAME_STATE_PATH, GAME_STATE_DOC_ID);
-    // Sanitize state for Firestore (no undefined values)
     const cleanState: Record<string, any> = {
-      roundNumber: Number(state.roundNumber) || 1,
-      roundDuration: Number(state.roundDuration) || 125,
-      timeLeft: Math.max(0, Number(state.timeLeft) || 0),
-      isPaused: Boolean(state.isPaused),
-      leftPoints: Math.max(0, Number(state.leftPoints) || 0),
-      rightPoints: Math.max(0, Number(state.rightPoints) || 0),
-      leftGiftsCount: Math.max(0, Number(state.leftGiftsCount) || 0),
-      rightGiftsCount: Math.max(0, Number(state.rightGiftsCount) || 0),
-      leftCommentProgress: Math.max(0, Number(state.leftCommentProgress) || 0),
-      rightCommentProgress: Math.max(0, Number(state.rightCommentProgress) || 0),
-      victoryScore: {
-        left: Number(state.victoryScore?.left) || 0,
-        right: Number(state.victoryScore?.right) || 0,
-      },
-      lastLeftUser: String(state.lastLeftUser || '@Mara').slice(0, 100),
-      lastLeftText: String(state.lastLeftText || 'Rosa x1 • +1 ponto').slice(0, 150),
-      lastRightUser: String(state.lastRightUser || '@Lucimara').slice(0, 100),
-      lastRightText: String(state.lastRightText || 'Sorvete x1 • +1 ponto').slice(0, 150),
-      isRoundOver: Boolean(state.isRoundOver),
-      winner: String(state.winner || 'none').slice(0, 20),
-      resetCountdown: Number(state.resetCountdown) || 5,
-      tiktokUsername: String(state.tiktokUsername || 'leonardosutello').slice(0, 100),
       updatedAt: Date.now(),
     };
+
+    if (typeof state.roundNumber === 'number') cleanState.roundNumber = state.roundNumber;
+    if (typeof state.roundDuration === 'number') cleanState.roundDuration = state.roundDuration;
+    if (typeof state.timeLeft === 'number') cleanState.timeLeft = Math.max(0, state.timeLeft);
+    if (typeof state.isPaused === 'boolean') cleanState.isPaused = state.isPaused;
+    if (typeof state.leftPoints === 'number') cleanState.leftPoints = Math.max(0, state.leftPoints);
+    if (typeof state.rightPoints === 'number') cleanState.rightPoints = Math.max(0, state.rightPoints);
+    if (typeof state.leftGiftsCount === 'number') cleanState.leftGiftsCount = Math.max(0, state.leftGiftsCount);
+    if (typeof state.rightGiftsCount === 'number') cleanState.rightGiftsCount = Math.max(0, state.rightGiftsCount);
+    if (typeof state.leftCommentProgress === 'number') cleanState.leftCommentProgress = Math.max(0, state.leftCommentProgress);
+    if (typeof state.rightCommentProgress === 'number') cleanState.rightCommentProgress = Math.max(0, state.rightCommentProgress);
+    if (state.victoryScore && typeof state.victoryScore.left === 'number') {
+      cleanState.victoryScore = {
+        left: state.victoryScore.left,
+        right: state.victoryScore.right ?? 0,
+      };
+    }
+    if (state.lastLeftUser !== undefined) cleanState.lastLeftUser = String(state.lastLeftUser).slice(0, 100);
+    if (state.lastLeftText !== undefined) cleanState.lastLeftText = String(state.lastLeftText).slice(0, 150);
+    if (state.lastRightUser !== undefined) cleanState.lastRightUser = String(state.lastRightUser).slice(0, 100);
+    if (state.lastRightText !== undefined) cleanState.lastRightText = String(state.lastRightText).slice(0, 150);
+    if (typeof state.isRoundOver === 'boolean') cleanState.isRoundOver = state.isRoundOver;
+    if (state.winner !== undefined) cleanState.winner = String(state.winner || 'none').slice(0, 20);
+    if (typeof state.resetCountdown === 'number') cleanState.resetCountdown = state.resetCountdown;
+    if (state.tiktokUsername !== undefined) cleanState.tiktokUsername = String(state.tiktokUsername).slice(0, 100);
 
     if (state.leftCandidate) {
       cleanState.leftCandidate = {
         id: String(state.leftCandidate.id || 'left'),
-        number: String(state.leftCandidate.number || '13'),
-        name: String(state.leftCandidate.name || 'LUIZ INÁCIO LULA').slice(0, 100),
-        role: String(state.leftCandidate.role || 'PRESIDENTE').slice(0, 50),
-        party: String(state.leftCandidate.party || 'PT').slice(0, 50),
+        number: String(state.leftCandidate.number !== undefined ? state.leftCandidate.number : '13'),
+        name: String(state.leftCandidate.name !== undefined ? state.leftCandidate.name : '').slice(0, 100),
+        role: String(state.leftCandidate.role !== undefined ? state.leftCandidate.role : 'PRESIDENTE').slice(0, 50),
+        party: String(state.leftCandidate.party !== undefined ? state.leftCandidate.party : '').slice(0, 50),
         coalition: String(state.leftCandidate.coalition || '').slice(0, 100),
         vice: String(state.leftCandidate.vice || '').slice(0, 100),
         color: String(state.leftCandidate.color || '#dc2626'),
-        colorClass: String(state.leftCandidate.colorClass || ''),
-        bgGradient: String(state.leftCandidate.bgGradient || ''),
-        photoUrl: String(state.leftCandidate.photoUrl || '').slice(0, 1000),
+        colorClass: String(state.leftCandidate.colorClass || 'text-red-500 border-red-500 bg-red-500'),
+        bgGradient: String(state.leftCandidate.bgGradient || 'from-red-600 via-red-700 to-rose-600'),
+        photoUrl: String(state.leftCandidate.photoUrl || '').slice(0, 1000000),
         primaryGift: state.leftCandidate.primaryGift || {},
         bonusGifts: state.leftCandidate.bonusGifts || [],
       };
@@ -145,16 +147,16 @@ export async function saveGameStateToFirestore(state: any) {
     if (state.rightCandidate) {
       cleanState.rightCandidate = {
         id: String(state.rightCandidate.id || 'right'),
-        number: String(state.rightCandidate.number || '22'),
-        name: String(state.rightCandidate.name || 'FLÁVIO BOLSONARO').slice(0, 100),
-        role: String(state.rightCandidate.role || 'PRESIDENTE').slice(0, 50),
-        party: String(state.rightCandidate.party || 'PL').slice(0, 50),
+        number: String(state.rightCandidate.number !== undefined ? state.rightCandidate.number : '22'),
+        name: String(state.rightCandidate.name !== undefined ? state.rightCandidate.name : '').slice(0, 100),
+        role: String(state.rightCandidate.role !== undefined ? state.rightCandidate.role : 'PRESIDENTE').slice(0, 50),
+        party: String(state.rightCandidate.party !== undefined ? state.rightCandidate.party : '').slice(0, 50),
         coalition: String(state.rightCandidate.coalition || '').slice(0, 100),
         vice: String(state.rightCandidate.vice || '').slice(0, 100),
         color: String(state.rightCandidate.color || '#2563eb'),
-        colorClass: String(state.rightCandidate.colorClass || ''),
-        bgGradient: String(state.rightCandidate.bgGradient || ''),
-        photoUrl: String(state.rightCandidate.photoUrl || '').slice(0, 1000),
+        colorClass: String(state.rightCandidate.colorClass || 'text-blue-500 border-blue-500 bg-blue-500'),
+        bgGradient: String(state.rightCandidate.bgGradient || 'from-blue-600 via-blue-700 to-amber-500'),
+        photoUrl: String(state.rightCandidate.photoUrl || '').slice(0, 1000000),
         primaryGift: state.rightCandidate.primaryGift || {},
         bonusGifts: state.rightCandidate.bonusGifts || [],
       };

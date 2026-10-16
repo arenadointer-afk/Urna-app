@@ -71,9 +71,9 @@ export const BottomLiveFeed: React.FC<BottomLiveFeedProps> = ({
               <span
                 className={`font-black ${
                   msg.side === 'left'
-                    ? 'text-blue-400'
-                    : msg.side === 'right'
                     ? 'text-red-400'
+                    : msg.side === 'right'
+                    ? 'text-blue-400'
                     : 'text-slate-200'
                 }`}
               >

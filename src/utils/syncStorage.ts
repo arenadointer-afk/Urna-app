@@ -79,7 +79,7 @@ export function getSavedCandidate(side: 'left' | 'right'): Candidate {
     const raw = localStorage.getItem(side === 'left' ? STORAGE_KEYS.LEFT_CANDIDATE : STORAGE_KEYS.RIGHT_CANDIDATE);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.name && parsed.number) {
+      if (parsed && typeof parsed.name === 'string' && parsed.id) {
         return parsed;
       }
     }

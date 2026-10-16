@@ -29,7 +29,7 @@ export const EpicGiftAlert: React.FC<EpicGiftAlertProps> = ({ gift, onDismiss })
       particleCount: 80,
       spread: 70,
       origin: { y: 0.5 },
-      colors: gift.side === 'left' ? ['#3b82f6', '#fef08a', '#ffffff'] : ['#ef4444', '#fef08a', '#ffffff'],
+      colors: gift.side === 'left' ? ['#ef4444', '#fef08a', '#ffffff'] : ['#3b82f6', '#fef08a', '#ffffff'],
       zIndex: 9999,
     });
 
@@ -47,8 +47,8 @@ export const EpicGiftAlert: React.FC<EpicGiftAlertProps> = ({ gift, onDismiss })
       <div
         className={`w-full max-w-sm rounded-3xl p-4 text-center shadow-2xl border-4 backdrop-blur-md transform transition-all ${
           gift.side === 'left'
-            ? 'bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 border-amber-400 shadow-blue-500/50'
-            : 'bg-gradient-to-r from-red-950 via-slate-900 to-red-900 border-amber-400 shadow-red-500/50'
+            ? 'bg-gradient-to-r from-red-950 via-slate-900 to-red-900 border-amber-400 shadow-red-500/50'
+            : 'bg-gradient-to-r from-blue-950 via-slate-900 to-blue-900 border-amber-400 shadow-blue-500/50'
         }`}
       >
         {/* Top Gold Badge */}
