@@ -62,6 +62,20 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
             />
           </div>
 
+          <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+            <span>Senha padrão: <strong className="text-amber-400 font-digital">851985</strong></span>
+            <button
+              type="button"
+              onClick={() => {
+                setPassword(ADMIN_PASSWORD);
+                setError(false);
+              }}
+              className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
+            >
+              Preencher Senha
+            </button>
+          </div>
+
           {error && (
             <div className="flex items-center justify-center gap-1.5 text-xs text-red-400 font-bold animate-shake">
               <AlertCircle className="w-3.5 h-3.5" />

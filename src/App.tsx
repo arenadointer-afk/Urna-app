@@ -973,6 +973,13 @@ export default function App() {
           status: 'error',
           lastError: data.error || 'Erro ao conectar ao TikTok',
         }));
+      } else {
+        setTiktokStatus((prev) => ({
+          ...prev,
+          status: 'connected',
+          username: clean,
+          lastError: '',
+        }));
       }
     } catch (err: any) {
       setTiktokStatus((prev) => ({
@@ -1037,7 +1044,10 @@ export default function App() {
         leftPoints={leftPoints}
         rightPoints={rightPoints}
         timeLeft={timeLeft}
-        onOpenAdmin={() => setIsPasswordModalOpen(true)}
+        onOpenAdmin={(tab) => {
+          if (tab) setAdminInitialTab(tab);
+          setIsPasswordModalOpen(true);
+        }}
         victoryScore={victoryScore}
         roundNumber={roundNumber}
       />

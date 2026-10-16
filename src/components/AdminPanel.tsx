@@ -215,8 +215,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setCopiedAdminUrl(false), 2000);
   };
 
-  if (!isOpen) return null;
-
   const [formCandidate, setFormCandidate] = useState<Candidate>(
     editingSide === 'left' ? leftCandidate : rightCandidate
   );
@@ -349,6 +347,8 @@ tiktokLiveConnection.on('gift', data => {
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2500);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">

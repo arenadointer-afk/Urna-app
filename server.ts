@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { createRequire } from 'module';
 import path from 'path';
@@ -7,14 +7,7 @@ import { fileURLToPath } from 'url';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
-const require = createRequire(import.meta.url);
-let TikTokLiveConnectionClass: any = null;
-try {
-  const tlc = require('tiktok-live-connector');
-  TikTokLiveConnectionClass = tlc.TikTokLiveConnection || tlc.WebcastPushConnection || tlc.default || tlc;
-} catch (e) {
-  console.warn('tiktok-live-connector import error:', e);
-}
+import { TikTokLiveConnection } from 'tiktok-live-connector';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -687,11 +680,7 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
   });
 
   try {
-    if (!TikTokLiveConnectionClass) {
-      throw new Error('Módulo TikTokLiveConnection não encontrado no servidor');
-    }
-
-    const conn = new TikTokLiveConnectionClass(cleanUsername, {
+    const conn: any = new (TikTokLiveConnection as any)(cleanUsername, {
       processInitialData: false,
       enableExtendedGiftInfo: true,
       requestPollingIntervalMs: 1000,
@@ -816,16 +805,24 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
     await conn.connect();
     return { success: true, message: `Conectado à live de @${cleanUsername}!` };
   } catch (error: any) {
-    const errorText = error?.message || 'Falha ao conectar no TikTok';
+    let rawError = error?.message || 'Falha ao conectar no TikTok';
+    let userFriendlyMsg = rawError;
+
+    if (rawError.includes("isn't online") || rawError.includes("offline") || rawError.includes("Room ID") || rawError.includes("not found")) {
+      userFriendlyMsg = `A live de @${cleanUsername} não foi encontrada ou ainda está offline no TikTok. Inicie a live pelo aplicativo do TikTok e tente novamente.`;
+    } else if (rawError.includes("rate limit") || rawError.includes("too many requests")) {
+      userFriendlyMsg = `Limite temporário de requisições do TikTok atingido. Aguarde alguns segundos e reconecte.`;
+    }
+
     connectionStatus = 'error';
-    lastErrorMessage = errorText;
+    lastErrorMessage = userFriendlyMsg;
     broadcastToClients({
       type: 'status',
       status: 'error',
       username: cleanUsername,
-      lastError: errorText,
+      lastError: userFriendlyMsg,
     });
-    return { success: false, message: errorText };
+    return { success: false, message: userFriendlyMsg };
   }
 }
 
@@ -837,7 +834,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
   if (result.success) {
     return res.json(result);
   } else {
-    return res.status(500).json({ error: result.message });
+    return res.status(400).json({ error: result.message });
   }
 });
 
