@@ -134,11 +134,14 @@ export function playUrnaConfirmSound() {
       gain.connect(ctx.destination);
 
       osc.start(now + start);
-      osc.stop(now + start + dur);
     });
   } catch (err) {
     console.debug('Audio error', err);
   }
+}
+
+export function playVoteSound() {
+  playUrnaConfirmSound();
 }
 
 /**

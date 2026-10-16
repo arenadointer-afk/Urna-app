@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { createRequire } from 'module';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const require = createRequire(import.meta.url);
@@ -15,20 +16,167 @@ try {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const STATE_FILE = path.resolve(__dirname, 'server_state.json');
 
 const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0';
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
-// In-memory TikTok connection state
-let tiktokLiveConnection: any = null;
-let currentUsername = '';
-let connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
-let viewersCount = 0;
-let totalLikesCount = 0;
-let lastErrorMessage = '';
+// Initial Default Candidates
+const DEFAULT_LEFT_CANDIDATE = {
+  id: 'left',
+  number: '13',
+  name: 'LUIZ INÁCIO LULA',
+  role: 'PRESIDENTE',
+  party: 'PT',
+  coalition: 'BRASIL DA ESPERANÇA',
+  vice: 'GERALDO ALCKMIN',
+  color: '#dc2626',
+  colorClass: 'text-red-500 border-red-500 bg-red-500',
+  bgGradient: 'from-red-600 via-red-700 to-rose-600',
+  photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80',
+  primaryGift: {
+    id: 'rose',
+    name: 'Rosa',
+    icon: '🌹',
+    points: 1,
+    badge: '1 VOTO',
+  },
+  bonusGifts: [
+    { id: 'heart', name: 'Coração', icon: '💖', points: 10, badge: '10 VOTOS' },
+    { id: 'star', name: 'Estrela 13', icon: '⭐', points: 30, badge: '30 VOTOS' },
+    { id: 'galaxy', name: 'Galáxia Épica', icon: '🌌', points: 100, badge: '100 VOTOS' },
+  ],
+};
+
+const DEFAULT_RIGHT_CANDIDATE = {
+  id: 'right',
+  number: '22',
+  name: 'FLÁVIO BOLSONARO',
+  role: 'PRESIDENTE',
+  party: 'PL',
+  coalition: 'PELO BEM DO BRASIL',
+  vice: 'BRAGA NETTO',
+  color: '#2563eb',
+  colorClass: 'text-blue-500 border-blue-500 bg-blue-500',
+  bgGradient: 'from-blue-600 via-blue-700 to-amber-500',
+  photoUrl: 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?w=300&auto=format&fit=crop&q=80',
+  primaryGift: {
+    id: 'icecream',
+    name: 'Sorvete',
+    icon: '🍦',
+    points: 1,
+    badge: '1 VOTO',
+  },
+  bonusGifts: [
+    { id: 'donut', name: 'Donut', icon: '🍩', points: 10, badge: '10 VOTOS' },
+    { id: 'cap', name: 'Boné 22', icon: '🧢', points: 30, badge: '30 VOTOS' },
+    { id: 'lion', name: 'Leão Lendário', icon: '🦁', points: 100, badge: '100 VOTOS' },
+  ],
+};
+
+// Authoritative Server State
+interface ServerGameState {
+  leftCandidate: any;
+  rightCandidate: any;
+  roundNumber: number;
+  roundDuration: number;
+  timeLeft: number;
+  isPaused: boolean;
+  leftPoints: number;
+  rightPoints: number;
+  leftGiftsCount: number;
+  rightGiftsCount: number;
+  leftCommentProgress: number;
+  rightCommentProgress: number;
+  victoryScore: { left: number; right: number };
+  lastLeftUser: string;
+  lastLeftText: string;
+  lastRightUser: string;
+  lastRightText: string;
+  isRoundOver: boolean;
+  winner: 'left' | 'right' | 'draw' | null;
+  resetCountdown: number;
+  chatMessages: any[];
+  tiktokUsername: string;
+  botEnabled: boolean;
+}
+
+let serverState: ServerGameState = {
+  leftCandidate: DEFAULT_LEFT_CANDIDATE,
+  rightCandidate: DEFAULT_RIGHT_CANDIDATE,
+  roundNumber: 1,
+  roundDuration: 125,
+  timeLeft: 125,
+  isPaused: false,
+  leftPoints: 0,
+  rightPoints: 0,
+  leftGiftsCount: 0,
+  rightGiftsCount: 0,
+  leftCommentProgress: 0,
+  rightCommentProgress: 0,
+  victoryScore: { left: 0, right: 0 },
+  lastLeftUser: '@Mara',
+  lastLeftText: 'Rosa x1 • +1 ponto',
+  lastRightUser: '@Lucimara',
+  lastRightText: 'Sorvete x1 • +1 ponto',
+  isRoundOver: false,
+  winner: null,
+  resetCountdown: 5,
+  chatMessages: [
+    {
+      id: 'm1',
+      username: '@Lucimara',
+      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
+      text: 'Sorvete (+1 ponto)',
+      side: 'right',
+      timestamp: Date.now() - 4000,
+      isGift: true,
+      giftIcon: '🍦',
+      points: 1,
+    },
+    {
+      id: 'm2',
+      username: '@Mara',
+      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+      text: 'Rosa (+1 ponto)',
+      side: 'left',
+      timestamp: Date.now() - 2000,
+      isGift: true,
+      giftIcon: '🌹',
+      points: 1,
+    },
+  ],
+  tiktokUsername: '',
+  botEnabled: false,
+};
+
+// Load saved state from disk if exists
+try {
+  if (fs.existsSync(STATE_FILE)) {
+    const raw = fs.readFileSync(STATE_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    serverState = { ...serverState, ...parsed };
+    console.log('[Server] Estado restaurado do disco com sucesso!');
+  }
+} catch (e) {
+  console.warn('[Server] Falha ao ler server_state.json', e);
+}
+
+// Persist state to disk safely
+let saveTimeout: any = null;
+function saveStateToDisk() {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    try {
+      fs.writeFileSync(STATE_FILE, JSON.stringify(serverState, null, 2), 'utf-8');
+    } catch (e) {
+      console.error('[Server] Erro ao salvar estado no disco:', e);
+    }
+  }, 500);
+}
 
 // Active SSE client connections
 const sseClients: Response[] = [];
@@ -45,7 +193,349 @@ function broadcastToClients(event: any) {
   }
 }
 
-// SSE stream for real-time live events to frontend tabs
+// Live TikTok connection state
+let tiktokLiveConnection: any = null;
+let currentUsername = serverState.tiktokUsername || '';
+let connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
+let viewersCount = 0;
+let totalLikesCount = 0;
+let lastErrorMessage = '';
+
+// Central vote logic
+function addVote(
+  side: 'left' | 'right',
+  amount: number,
+  giftName?: string,
+  giftIcon?: string,
+  username?: string
+) {
+  if (serverState.isRoundOver) return;
+
+  const user = username || '@fa_live';
+  const isGift = Boolean(giftName && giftName !== 'Manual' && !giftName.includes('Comentário'));
+  const actionText = isGift
+    ? `${giftName || 'Presente'} • +${amount} pontos`
+    : `${giftName || 'Voto'} • +${amount} ponto`;
+
+  if (side === 'left') {
+    serverState.leftPoints += amount;
+    if (isGift) serverState.leftGiftsCount += (amount > 1 ? amount : 1);
+    serverState.lastLeftUser = user;
+    serverState.lastLeftText = actionText;
+  } else {
+    serverState.rightPoints += amount;
+    if (isGift) serverState.rightGiftsCount += (amount > 1 ? amount : 1);
+    serverState.lastRightUser = user;
+    serverState.lastRightText = actionText;
+  }
+
+  // Add chat message
+  const newMsg = {
+    id: `msg-${Date.now()}-${Math.random()}`,
+    username: user,
+    avatar: `https://images.unsplash.com/photo-${1535713875000 + Math.floor(Math.random() * 500)}?w=100&auto=format&fit=crop&q=80`,
+    text: isGift ? `${giftName} (+${amount} pontos)` : `${side === 'left' ? serverState.leftCandidate.number : serverState.rightCandidate.number}`,
+    side,
+    timestamp: Date.now(),
+    isGift,
+    giftIcon: giftIcon || (side === 'left' ? serverState.leftCandidate.primaryGift.icon : serverState.rightCandidate.primaryGift.icon),
+    points: amount,
+  };
+  serverState.chatMessages = [...serverState.chatMessages.slice(-25), newMsg];
+
+  saveStateToDisk();
+
+  broadcastToClients({
+    type: 'VOTE_TRIGGER',
+    side,
+    amount,
+    giftName,
+    giftIcon: newMsg.giftIcon,
+    username: user,
+    isEpic: amount >= 10,
+    state: serverState,
+  });
+}
+
+// Central chat comment logic: 5 comments with number = +1 point!
+function addComment(text: string, username?: string) {
+  const trimmed = text.trim();
+  const author = username || '@espectador';
+  const leftNum = String(serverState.leftCandidate.number);
+  const rightNum = String(serverState.rightCandidate.number);
+  const leftName = serverState.leftCandidate.name.split(' ')[0].toLowerCase();
+  const rightName = serverState.rightCandidate.name.split(' ')[0].toLowerCase();
+
+  const hasLeft = trimmed.includes(leftNum) || trimmed.toLowerCase().includes(leftName);
+  const hasRight = trimmed.includes(rightNum) || trimmed.toLowerCase().includes(rightName);
+
+  if (hasLeft) {
+    serverState.leftCommentProgress += 1;
+    if (serverState.leftCommentProgress >= 5) {
+      serverState.leftCommentProgress = 0;
+      addVote('left', 1, '5 Comentários no Chat', '💬', author);
+      return;
+    }
+    const newMsg = {
+      id: `cmt-${Date.now()}-${Math.random()}`,
+      username: author,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      text: `${leftNum} (${serverState.leftCommentProgress}/5 p/ +1 ponto)`,
+      side: 'left',
+      timestamp: Date.now(),
+    };
+    serverState.chatMessages = [...serverState.chatMessages.slice(-25), newMsg];
+  } else if (hasRight) {
+    serverState.rightCommentProgress += 1;
+    if (serverState.rightCommentProgress >= 5) {
+      serverState.rightCommentProgress = 0;
+      addVote('right', 1, '5 Comentários no Chat', '💬', author);
+      return;
+    }
+    const newMsg = {
+      id: `cmt-${Date.now()}-${Math.random()}`,
+      username: author,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      text: `${rightNum} (${serverState.rightCommentProgress}/5 p/ +1 ponto)`,
+      side: 'right',
+      timestamp: Date.now(),
+    };
+    serverState.chatMessages = [...serverState.chatMessages.slice(-25), newMsg];
+  } else {
+    const newMsg = {
+      id: `msg-${Date.now()}-${Math.random()}`,
+      username: author,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      text: trimmed,
+      side: 'neutral',
+      timestamp: Date.now(),
+    };
+    serverState.chatMessages = [...serverState.chatMessages.slice(-25), newMsg];
+  }
+
+  saveStateToDisk();
+
+  broadcastToClients({
+    type: 'CHAT_TRIGGER',
+    state: serverState,
+  });
+}
+
+// Server clock tick loop (Synchronized timer across all viewers and OBS)
+setInterval(() => {
+  if (serverState.isPaused) return;
+
+  if (!serverState.isRoundOver) {
+    if (serverState.timeLeft > 1) {
+      serverState.timeLeft -= 1;
+      broadcastToClients({
+        type: 'TIME_TICK',
+        timeLeft: serverState.timeLeft,
+        isPaused: false,
+        isRoundOver: false,
+        resetCountdown: serverState.resetCountdown,
+        roundNumber: serverState.roundNumber,
+      });
+    } else {
+      // Round Finished! Calculate Winner and Increment Victory Score
+      serverState.timeLeft = 0;
+      serverState.isRoundOver = true;
+      const winner =
+        serverState.leftPoints > serverState.rightPoints
+          ? 'left'
+          : serverState.rightPoints > serverState.leftPoints
+          ? 'right'
+          : 'draw';
+      serverState.winner = winner;
+      serverState.resetCountdown = 5;
+
+      if (winner === 'left') {
+        serverState.victoryScore.left += 1;
+      } else if (winner === 'right') {
+        serverState.victoryScore.right += 1;
+      }
+
+      saveStateToDisk();
+
+      broadcastToClients({
+        type: 'ROUND_OVER',
+        winner,
+        victoryScore: serverState.victoryScore,
+        state: serverState,
+      });
+    }
+  } else {
+    // In victory celebration countdown
+    if (serverState.resetCountdown > 1) {
+      serverState.resetCountdown -= 1;
+      broadcastToClients({
+        type: 'TIME_TICK',
+        timeLeft: 0,
+        isPaused: false,
+        isRoundOver: true,
+        resetCountdown: serverState.resetCountdown,
+        roundNumber: serverState.roundNumber,
+      });
+    } else {
+      // Auto restart next round
+      serverState.roundNumber += 1;
+      serverState.timeLeft = serverState.roundDuration;
+      serverState.leftPoints = 0;
+      serverState.rightPoints = 0;
+      serverState.leftGiftsCount = 0;
+      serverState.rightGiftsCount = 0;
+      serverState.leftCommentProgress = 0;
+      serverState.rightCommentProgress = 0;
+      serverState.isRoundOver = false;
+      serverState.winner = null;
+      serverState.resetCountdown = 5;
+
+      saveStateToDisk();
+
+      broadcastToClients({
+        type: 'ROUND_RESTART',
+        state: serverState,
+      });
+    }
+  }
+}, 1000);
+
+// API Endpoints
+
+// 1. Get Authoritative State
+app.get('/api/state', (_req: Request, res: Response) => {
+  res.json(serverState);
+});
+
+// 2. Update Candidate (photo, name, number, party, gifts, etc.)
+app.post('/api/candidate', (req: Request, res: Response) => {
+  const { side, candidate } = req.body;
+  if (side === 'left') {
+    serverState.leftCandidate = candidate;
+  } else if (side === 'right') {
+    serverState.rightCandidate = candidate;
+  }
+  saveStateToDisk();
+  broadcastToClients({
+    type: 'STATE_SYNC',
+    state: serverState,
+  });
+  res.json({ success: true, state: serverState });
+});
+
+// 3. Update All Candidates (Presets)
+app.post('/api/candidates', (req: Request, res: Response) => {
+  const { left, right } = req.body;
+  if (left) serverState.leftCandidate = left;
+  if (right) serverState.rightCandidate = right;
+  serverState.leftPoints = 0;
+  serverState.rightPoints = 0;
+  serverState.leftGiftsCount = 0;
+  serverState.rightGiftsCount = 0;
+  serverState.timeLeft = serverState.roundDuration;
+  saveStateToDisk();
+  broadcastToClients({
+    type: 'STATE_SYNC',
+    state: serverState,
+  });
+  res.json({ success: true, state: serverState });
+});
+
+// 4. Update Round Duration
+app.post('/api/duration', (req: Request, res: Response) => {
+  const { duration } = req.body;
+  const num = parseInt(duration, 10);
+  if (!isNaN(num) && num >= 5) {
+    serverState.roundDuration = num;
+    serverState.timeLeft = num;
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, roundDuration: num });
+  }
+  res.status(400).json({ error: 'Duração inválida' });
+});
+
+// 5. Toggle Pause
+app.post('/api/pause', (req: Request, res: Response) => {
+  serverState.isPaused = !serverState.isPaused;
+  saveStateToDisk();
+  broadcastToClients({
+    type: 'STATE_SYNC',
+    state: serverState,
+  });
+  res.json({ isPaused: serverState.isPaused });
+});
+
+// 6. Reset Current Round
+app.post('/api/reset-round', (_req: Request, res: Response) => {
+  serverState.timeLeft = serverState.roundDuration;
+  serverState.leftPoints = 0;
+  serverState.rightPoints = 0;
+  serverState.leftGiftsCount = 0;
+  serverState.rightGiftsCount = 0;
+  serverState.leftCommentProgress = 0;
+  serverState.rightCommentProgress = 0;
+  serverState.isRoundOver = false;
+  serverState.winner = null;
+  serverState.resetCountdown = 5;
+  saveStateToDisk();
+  broadcastToClients({
+    type: 'ROUND_RESTART',
+    state: serverState,
+  });
+  res.json({ success: true, state: serverState });
+});
+
+// 7. Update Victory Score
+app.post('/api/victory-score', (req: Request, res: Response) => {
+  const { victoryScore } = req.body;
+  if (victoryScore && typeof victoryScore.left === 'number' && typeof victoryScore.right === 'number') {
+    serverState.victoryScore = victoryScore;
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, victoryScore: serverState.victoryScore });
+  }
+  res.status(400).json({ error: 'Placar de vitórias inválido' });
+});
+
+// 8. Reset Victory Score
+app.post('/api/reset-series', (_req: Request, res: Response) => {
+  serverState.victoryScore = { left: 0, right: 0 };
+  saveStateToDisk();
+  broadcastToClients({
+    type: 'STATE_SYNC',
+    state: serverState,
+  });
+  res.json({ success: true, victoryScore: serverState.victoryScore });
+});
+
+// 9. Vote Trigger
+app.post('/api/vote', (req: Request, res: Response) => {
+  const { side, amount, giftName, giftIcon, username } = req.body;
+  if (side === 'left' || side === 'right') {
+    addVote(side, amount || 1, giftName, giftIcon, username);
+    return res.json({ success: true, state: serverState });
+  }
+  res.status(400).json({ error: 'Lado inválido' });
+});
+
+// 10. Chat Trigger
+app.post('/api/chat', (req: Request, res: Response) => {
+  const { text, username } = req.body;
+  if (text) {
+    addComment(text, username);
+    return res.json({ success: true, state: serverState });
+  }
+  res.status(400).json({ error: 'Mensagem vazia' });
+});
+
+// 11. SSE stream for real-time live events to frontend tabs
 app.get('/api/tiktok/stream', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -54,10 +544,11 @@ app.get('/api/tiktok/stream', (req: Request, res: Response) => {
 
   sseClients.push(res);
 
-  // Send initial status
+  // Send current state and status immediately
   res.write(
     `data: ${JSON.stringify({
-      type: 'status',
+      type: 'STATE_SYNC',
+      state: serverState,
       status: connectionStatus,
       username: currentUsername,
       viewers: viewersCount,
@@ -97,7 +588,6 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Nome de usuário vazio' });
   }
 
-  // Disconnect existing if any
   if (tiktokLiveConnection) {
     try {
       tiktokLiveConnection.disconnect();
@@ -106,6 +596,9 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
   }
 
   currentUsername = cleanUsername;
+  serverState.tiktokUsername = cleanUsername;
+  saveStateToDisk();
+
   connectionStatus = 'connecting';
   lastErrorMessage = '';
   viewersCount = 0;
@@ -122,6 +615,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
     if (!TikTokLiveConnectionClass) {
       throw new Error('Módulo TikTokLiveConnection não encontrado no servidor');
     }
+
     tiktokLiveConnection = new TikTokLiveConnectionClass(cleanUsername, {
       processInitialData: false,
       enableExtendedGiftInfo: true,
@@ -181,39 +675,54 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       });
     });
 
-    // Chat comment event
+    // Chat comment event from TikTok
     tiktokLiveConnection.on('chat', (data: any) => {
+      const comment = data.comment || '';
+      const user = data.uniqueId || data.nickname || '@usuario';
+      addComment(comment, user);
       broadcastToClients({
         type: 'chat',
-        uniqueId: data.uniqueId || data.nickname || '@usuario',
-        nickname: data.nickname || data.uniqueId || 'Espectador',
-        comment: data.comment || '',
-        profilePictureUrl: data.profilePictureUrl || '',
+        uniqueId: user,
+        comment,
         timestamp: Date.now(),
       });
     });
 
-    // Gift event
+    // Gift event from TikTok
     tiktokLiveConnection.on('gift', (data: any) => {
-      // Repeat gifts handling: giftType 1 has repeats
-      if (data.giftType === 1 && !data.repeatEnd) {
-        return;
-      }
+      if (data.giftType === 1 && !data.repeatEnd) return;
       const repeatCount = data.repeatCount || 1;
       const diamondCount = (data.diamondCount || 1) * repeatCount;
+      const giftName = data.giftName || 'Presente';
+      const user = data.uniqueId || data.nickname || '@fa_live';
+
+      const leftGiftName = serverState.leftCandidate.primaryGift.name.toLowerCase();
+      const rightGiftName = serverState.rightCandidate.primaryGift.name.toLowerCase();
+      const lowerGift = giftName.toLowerCase();
+
+      if (lowerGift.includes(leftGiftName) || lowerGift.includes('rosa') || lowerGift.includes('rose')) {
+        addVote('left', repeatCount, giftName, serverState.leftCandidate.primaryGift.icon, user);
+      } else if (lowerGift.includes(rightGiftName) || lowerGift.includes('sorvete') || lowerGift.includes('ice cream')) {
+        addVote('right', repeatCount, giftName, serverState.rightCandidate.primaryGift.icon, user);
+      } else if (diamondCount >= 10 || lowerGift.includes('leão') || lowerGift.includes('lion') || lowerGift.includes('galáxia')) {
+        const side = Math.random() > 0.5 ? 'left' : 'right';
+        addVote(side, diamondCount >= 50 ? 100 : diamondCount, giftName, '🦁', user);
+      } else {
+        const side = Math.random() > 0.5 ? 'left' : 'right';
+        addVote(side, repeatCount, giftName, side === 'left' ? serverState.leftCandidate.primaryGift.icon : serverState.rightCandidate.primaryGift.icon, user);
+      }
+
       broadcastToClients({
         type: 'gift',
-        uniqueId: data.uniqueId || data.nickname || '@usuario',
-        nickname: data.nickname || data.uniqueId || 'Espectador',
-        giftName: data.giftName || 'Presente',
+        uniqueId: user,
+        giftName,
         repeatCount,
         diamondCount,
-        giftPictureUrl: data.giftPictureUrl || '',
         timestamp: Date.now(),
       });
     });
 
-    // Likes event
+    // Likes event from TikTok
     tiktokLiveConnection.on('like', (data: any) => {
       totalLikesCount = data.totalLikes || totalLikesCount + (data.likeCount || 1);
       broadcastToClients({
@@ -224,11 +733,8 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       });
     });
 
-    // Room user count updates
     tiktokLiveConnection.on('roomUser', (data: any) => {
-      if (data.viewerCount) {
-        viewersCount = data.viewerCount;
-      }
+      if (data.viewerCount) viewersCount = data.viewerCount;
     });
 
     await tiktokLiveConnection.connect();
@@ -265,33 +771,44 @@ app.post('/api/tiktok/disconnect', (_req: Request, res: Response) => {
   res.json({ success: true, message: 'Desconectado com sucesso' });
 });
 
-// Test event trigger (for Live Nuvem tests without requiring an active TikTok live)
+// Test event trigger (for Live Nuvem tests)
 app.post('/api/tiktok/test-event', (req: Request, res: Response) => {
   const { type, data } = req.body;
   if (type === 'gift') {
+    const giftName = data?.giftName || 'Rosa';
+    const repeatCount = data?.repeatCount || 1;
+    const user = data?.uniqueId || '@testador_nuvem';
+    const lower = giftName.toLowerCase();
+    const leftName = serverState.leftCandidate.primaryGift.name.toLowerCase();
+
+    if (lower.includes(leftName) || lower.includes('rosa')) {
+      addVote('left', repeatCount, giftName, serverState.leftCandidate.primaryGift.icon, user);
+    } else {
+      addVote('right', repeatCount, giftName, serverState.rightCandidate.primaryGift.icon, user);
+    }
+
     broadcastToClients({
       type: 'gift',
-      uniqueId: data?.uniqueId || '@test_fan',
-      nickname: data?.nickname || 'Testador Nuvem',
-      giftName: data?.giftName || 'Rosa',
-      repeatCount: data?.repeatCount || 1,
+      uniqueId: user,
+      giftName,
+      repeatCount,
       diamondCount: data?.diamondCount || 1,
-      giftPictureUrl: data?.giftPictureUrl || '',
       timestamp: Date.now(),
     });
-    return res.json({ success: true, message: 'Presente de teste enviado!' });
+    return res.json({ success: true, message: 'Presente de teste enviado com sucesso!' });
   }
 
   if (type === 'chat') {
+    const comment = data?.comment || '22';
+    const user = data?.uniqueId || '@comentador_nuvem';
+    addComment(comment, user);
     broadcastToClients({
       type: 'chat',
-      uniqueId: data?.uniqueId || '@test_fan',
-      nickname: data?.nickname || 'Testador Nuvem',
-      comment: data?.comment || '22',
-      profilePictureUrl: data?.profilePictureUrl || '',
+      uniqueId: user,
+      comment,
       timestamp: Date.now(),
     });
-    return res.json({ success: true, message: 'Comentário de teste enviado!' });
+    return res.json({ success: true, message: 'Comentário de teste enviado com sucesso!' });
   }
 
   res.status(400).json({ error: 'Tipo de evento de teste desconhecido' });

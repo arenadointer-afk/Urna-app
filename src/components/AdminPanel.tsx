@@ -1524,27 +1524,103 @@ tiktokLiveConnection.on('gift', data => {
                 </div>
               </div>
 
-              {/* Guia VPS & Nuvem */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-950/60 to-slate-950 border border-indigo-500/40 space-y-2">
-                <div className="flex items-center gap-2 text-indigo-300 font-black text-sm">
-                  <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                  <span>Como Transmitir 24 Horas na Nuvem sem Celular/PC Ligado</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  Para rodar 24h na nuvem sem gastar energia:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
-                    <strong className="text-amber-400 text-xs block">Opção A: Servidor VPS Linux</strong>
-                    <p className="text-[11px] text-slate-400">
-                      Alugue uma VPS (Oracle Cloud Always Free ou Contabo/DigitalOcean). Roda navegador headless enviando sinal RTMP com sua chave de live do TikTok.
+              {/* Guia Completo Passo a Passo: Hospedar na Nuvem & Vincular ao TikTok */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-indigo-950/80 via-slate-900 to-purple-950/70 border-2 border-indigo-500/50 space-y-3.5 shadow-2xl">
+                <div className="flex items-center gap-2 pb-2 border-b border-indigo-500/40">
+                  <div className="p-2 rounded-xl bg-indigo-500/20 text-indigo-300">
+                    <Rocket className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-sm sm:text-base text-white">
+                      GUIA PASSO A PASSO: HOSPEDAR NA NUVEM & VINCULAR AO TIKTOK
+                    </h4>
+                    <p className="text-[11px] text-indigo-200">
+                      Tudo o que você precisa para colocar a Urna no ar 24h e capturar presentes e chat ao vivo.
                     </p>
                   </div>
-                  <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
-                    <strong className="text-emerald-400 text-xs block">Opção B: Plataforma Pronta (Zero Código)</strong>
-                    <p className="text-[11px] text-slate-400">
-                      Serviços como <em>GoStream ou Live24.pro</em> permitem colar o link do jogo e a Chave de Live. Transmitem 24/7 automaticamente na nuvem.
+                </div>
+
+                <div className="space-y-3 text-xs text-slate-200">
+                  {/* Passo 1 */}
+                  <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center gap-2 font-black text-amber-400">
+                      <span className="w-5 h-5 rounded-full bg-amber-500 text-zinc-950 text-xs flex items-center justify-center font-black">1</span>
+                      <span>Hospedar a Urna Gratuitamente na Nuvem (Render ou Railway)</span>
+                    </div>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      Este projeto é <strong>Full-Stack Node.js</strong> (possui o servidor <code className="text-emerald-400">server.ts</code> que faz a ponte com o TikTok). Para hospedar grátis com link público 24h:
                     </p>
+                    <div className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 text-[11px] space-y-1 font-mono text-slate-300">
+                      <div>1. Crie uma conta gratuita em <strong className="text-white">render.com</strong> ou <strong className="text-white">railway.app</strong>.</div>
+                      <div>2. Clique em <strong>New +</strong> &rarr; <strong>Web Service</strong> e conecte seu repositório GitHub <strong className="text-amber-300">arenadointer-afk/Urna-app</strong>.</div>
+                      <div>3. Defina os comandos:</div>
+                      <div className="text-emerald-400 pl-3">• Build Command: <code className="text-white bg-black/60 px-1 rounded">npm install && npm run build</code></div>
+                      <div className="text-emerald-400 pl-3">• Start Command: <code className="text-white bg-black/60 px-1 rounded">npm start</code></div>
+                      <div>4. Clique em <strong>Deploy</strong>. Em 2 minutos você terá seu link permanente na nuvem!</div>
+                    </div>
+                  </div>
+
+                  {/* Passo 2 */}
+                  <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center gap-2 font-black text-emerald-400">
+                      <span className="w-5 h-5 rounded-full bg-emerald-500 text-zinc-950 text-xs flex items-center justify-center font-black">2</span>
+                      <span>Vincular ao TikTok (Como o App Puxa os Dados Sem Senha)</span>
+                    </div>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      O TikTok transmite os eventos da LIVE (comentários, presentes, curtidas) publicamente via protocolo WebSocket. Você não precisa colocar senha nem autorização da conta:
+                    </p>
+                    <div className="bg-zinc-950 p-2.5 rounded-lg border border-zinc-800 text-[11px] space-y-1 text-slate-300">
+                      <div>• <strong>1. Inicie sua Live no TikTok:</strong> abra a live no seu celular ou pelo TikTok Live Studio no PC.</div>
+                      <div>• <strong>2. Conecte na Urna:</strong> aqui no Painel ADM, na caixa acima, digite o seu <code className="text-emerald-400 font-bold">@usuario</code> e clique no botão verde <strong className="text-white">"CONECTAR NA LIVE"</strong>.</div>
+                      <div>• <strong>3. Pronto!</strong> O indicador mudará para <span className="text-emerald-400 font-bold">🟢 AO VIVO E CONECTADO</span> e qualquer pessoa que comentar ou enviar presente fará a urna pontuar imediatamente!</div>
+                    </div>
+                  </div>
+
+                  {/* Passo 3 */}
+                  <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center gap-2 font-black text-blue-400">
+                      <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-xs flex items-center justify-center font-black">3</span>
+                      <span>Regras Automáticas de Pontuação da Live</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-0.5">
+                      <div className="p-2 rounded-lg bg-blue-950/60 border border-blue-500/40">
+                        <strong className="text-blue-300 block mb-0.5">🌹 Presente 1 (Esquerda):</strong>
+                        Mandar <strong>Rosa</strong> soma +1 voto imediato na Urna da Esquerda ({leftCandidate.number} - {leftCandidate.name}). Se mandar combo 5x, soma +5 votos!
+                      </div>
+                      <div className="p-2 rounded-lg bg-red-950/60 border border-red-500/40">
+                        <strong className="text-red-300 block mb-0.5">🍦 Presente 2 (Direita):</strong>
+                        Mandar <strong>Sorvete</strong> soma +1 voto imediato na Urna da Direita ({rightCandidate.number} - {rightCandidate.name}).
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 sm:col-span-2">
+                        <strong className="text-amber-300 block mb-0.5">💬 Regra dos Comentários do Chat:</strong>
+                        Quando os espectadores comentam o número <strong>"{leftCandidate.number}"</strong> ou <strong>"{rightCandidate.number}"</strong> no chat do TikTok, o contador soma. A cada <strong>5 comentários</strong>, o candidato ganha +1 ponto!
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Passo 4 */}
+                  <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center gap-2 font-black text-purple-400">
+                      <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-black">4</span>
+                      <span>Como Fazer Live 24 Horas sem Celular nem PC Ligado</span>
+                    </div>
+                    <p className="text-[11.5px] text-slate-300 leading-relaxed">
+                      Se você quer deixar a live gerando presentes 24h por dia continuamente:
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                        <strong className="text-amber-400 block text-[11px] mb-1">Opção A: Plataforma Nuvem (Zero Código)</strong>
+                        <span className="text-[10.5px] text-slate-400 leading-normal block">
+                          Serviços como <strong>Live24.pro</strong> ou <strong>GoStream</strong> permitem colar o link da Urna (<code className="text-white">seu-app.com?mode=live</code>) e a chave RTMP do TikTok. Eles geram a live 24/7 na nuvem.
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                        <strong className="text-emerald-400 block text-[11px] mb-1">Opção B: Servidor VPS Linux (R$ 20/mês)</strong>
+                        <span className="text-[10.5px] text-slate-400 leading-normal block">
+                          Alugue uma VPS Linux na Contabo, Hetzner ou DigitalOcean (ou use Oracle Cloud Always Free). Roda um FFmpeg ou navegador headless transmitindo para sua Chave de Live sem gastar luz de casa.
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
