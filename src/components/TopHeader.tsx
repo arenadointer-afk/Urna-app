@@ -75,10 +75,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </span>
         </div>
 
-        {/* Center: Placar Geral da Série MAIOR e centralizado */}
+        {/* Center: Placar Geral MAIOR e centralizado */}
         <div className="flex flex-col items-center justify-center flex-1">
           <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-300 drop-shadow leading-none mb-1">
-            PLACAR DA SÉRIE
+            PLACAR
           </span>
           <div className="flex items-center gap-2 sm:gap-2.5">
             <span className="min-w-[34px] sm:min-w-[44px] px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-xl bg-red-600 text-white font-digital font-black text-lg sm:text-2xl text-center shadow-lg border-2 border-red-400/90 drop-shadow">
@@ -100,7 +100,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       </div>
 
       {/* 2. Timer & Gifts Row (Rosa +1 - Timer 02:05 - Sorvete +1) */}
-      <div className="w-full max-w-md flex items-center justify-between px-1 my-1">
+      <div className="w-full max-w-md flex items-center justify-between px-1 my-0.5">
         {/* Left: Gift +1 / Voto Left (Vermelho) */}
         <div className="flex flex-col items-center">
           <div className="relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border border-red-500/80 shadow">
@@ -112,7 +112,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </span>
           </div>
           <div className="mt-1 px-2.5 py-0.5 rounded-md text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border border-red-400 bg-red-600 whitespace-nowrap">
-            VOTO NO {leftCandidate.number}
+            {leftCandidate.primaryGift.name || 'Rosa'} p/ {leftCandidate.name.split(' ')[0]}
           </div>
         </div>
 
@@ -140,50 +140,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </span>
           </div>
           <div className="mt-1 px-2.5 py-0.5 rounded-md text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border border-blue-400 bg-blue-600 whitespace-nowrap">
-            VOTO NO {rightCandidate.number}
+            {rightCandidate.primaryGift.name || 'Sorvete'} p/ {rightCandidate.name.split(' ')[0]}
           </div>
-        </div>
-      </div>
-
-      {/* 3. Status Bar: TOTAL | DIFERENÇA | LÍDER */}
-      <div className="w-full max-w-md grid grid-cols-3 gap-1.5 px-1 my-1">
-        {/* TOTAL */}
-        <div className="py-1 px-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-center flex flex-col justify-center">
-          <span className="text-[8px] font-black tracking-wider text-slate-400 uppercase">
-            TOTAL
-          </span>
-          <span className="text-sm sm:text-base font-black font-digital text-white leading-none mt-0.5">
-            {total}
-          </span>
-        </div>
-
-        {/* DIFERENÇA */}
-        <div className="py-1 px-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-center flex flex-col justify-center">
-          <span className="text-[8px] font-black tracking-wider text-slate-400 uppercase">
-            DIFERENÇA
-          </span>
-          <span className="text-sm sm:text-base font-black font-digital text-amber-300 leading-none mt-0.5">
-            {difference}
-          </span>
-        </div>
-
-        {/* LEADER BADGE */}
-        <div
-          className={`py-1 px-1.5 rounded-xl text-center flex flex-col justify-center shadow-lg transition-all text-white font-black uppercase ${
-            leader === 'left'
-              ? 'bg-red-600 border border-red-400 animate-pulse'
-              : leader === 'right'
-              ? 'bg-blue-600 border border-blue-400 animate-pulse'
-              : 'bg-amber-600 border border-amber-400'
-          }`}
-        >
-          <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-tight truncate leading-tight">
-            {leader === 'left'
-              ? `${leftCandidate.number} NA FRENTE`
-              : leader === 'right'
-              ? `${rightCandidate.number} NA FRENTE`
-              : 'TUDO IGUAL'}
-          </span>
         </div>
       </div>
     </header>

@@ -1382,9 +1382,9 @@ tiktokLiveConnection.on('gift', data => {
                       <Trophy className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-black text-sm text-white">Placar Geral de Vitórias (Série)</h4>
+                      <h4 className="font-black text-sm text-white">Placar</h4>
                       <p className="text-[11px] text-yellow-200">
-                        Fica gravado na memória do app e nunca zera ao atualizar a página!
+                        Contagem de vitórias sincronizada em tempo real!
                       </p>
                     </div>
                   </div>
@@ -1439,10 +1439,10 @@ tiktokLiveConnection.on('gift', data => {
                 <button
                   type="button"
                   onClick={onResetVictoryScore}
-                  className="w-full py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/60 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  className="w-full py-2 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700 font-black text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95 shadow"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Zerar Placar Geral (Iniciar Nova Série do Zero)</span>
+                  <span>Zerar Placar</span>
                 </button>
               </div>
               {/* Play / Pause / Reset */}

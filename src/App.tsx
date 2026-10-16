@@ -10,6 +10,7 @@ import {
 } from './types';
 import { PRESET_DUELS } from './utils/presets';
 import { TopHeader } from './components/TopHeader';
+import { CandidateBox } from './components/CandidateBox';
 import { UrnaMachine } from './components/UrnaMachine';
 import { BottomLiveFeed } from './components/BottomLiveFeed';
 import { VictoryModal } from './components/VictoryModal';
@@ -92,9 +93,14 @@ export default function App() {
   const [winner, setWinner] = useState<'left' | 'right' | 'draw' | null>(null);
   const [resetCountdown, setResetCountdown] = useState<number>(5);
 
-  // Animation Triggers
+  // Animation Triggers for the Single Urna
   const [lastLeftVoteTimestamp, setLastLeftVoteTimestamp] = useState<number>(0);
   const [lastRightVoteTimestamp, setLastRightVoteTimestamp] = useState<number>(0);
+  const [lastVoteTimestamp, setLastVoteTimestamp] = useState<number>(0);
+  const [lastVoteSide, setLastVoteSide] = useState<'left' | 'right' | null>(null);
+  const [lastVoteActionText, setLastVoteActionText] = useState<string>('');
+  const [lastVoteGiftIcon, setLastVoteGiftIcon] = useState<string>('🌹');
+  const [lastVoteAmount, setLastVoteAmount] = useState<number>(1);
   const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
   const [epicGift, setEpicGift] = useState<EpicGiftData | null>(null);
 
@@ -215,11 +221,17 @@ export default function App() {
   }, []);
 
   const lastServerTickRef = useRef<number>(0);
+  const lastResetTimestampRef = useRef<number>(0);
 
   // Sincroniza estado vindo do servidor e grava no disco / localStorage
   // Protegido contra sobreposição acidental de timeLeft e zeramento prematuro de pontos
   const applyServerState = useCallback((state: any, options?: { allowTimeSync?: boolean; isAuthoritativeReset?: boolean }) => {
     if (!state) return;
+
+    // Se o estado vindo da nuvem/servidor for mais antigo que o reset efetuado pelo ADM, ignora
+    if (state.updatedAt && state.updatedAt < lastResetTimestampRef.current) {
+      return;
+    }
     if (state.leftCandidate) {
       setLeftCandidate(state.leftCandidate);
       saveCandidate('left', state.leftCandidate);
@@ -452,6 +464,13 @@ export default function App() {
           ? `${event.giftName || 'Presente'} • +${amount} pontos`
           : `${event.giftName || 'Voto'} • +${amount} ponto`;
 
+        const voteSide = (event.side === 'right' ? 'right' : 'left') as 'left' | 'right';
+        setLastVoteTimestamp(Date.now());
+        setLastVoteSide(voteSide);
+        setLastVoteActionText(actionText);
+        setLastVoteGiftIcon(event.giftIcon || '🎁');
+        setLastVoteAmount(amount);
+
         if (event.side === 'left') {
           setLastLeftVoteTimestamp(Date.now());
           if (event.username) setLastLeftUser(event.username);
@@ -528,6 +547,13 @@ export default function App() {
             applyServerState(data.state);
             playVoteSound();
             spawnReaction(data.giftIcon, data.side);
+            const side = (data.side === 'right' ? 'right' : 'left') as 'left' | 'right';
+            const actionText = data.giftName ? `${data.giftName} para ${side === 'left' ? leftCandidate.name.split(' ')[0] : rightCandidate.name.split(' ')[0]}` : `Voto no ${side === 'left' ? leftCandidate.number : rightCandidate.number}`;
+            setLastVoteTimestamp(Date.now());
+            setLastVoteSide(side);
+            setLastVoteActionText(actionText);
+            setLastVoteGiftIcon(data.giftIcon || '🎁');
+            setLastVoteAmount(data.amount || 1);
             if (data.side === 'left') {
               setLastLeftVoteTimestamp(Date.now());
             } else {
@@ -765,6 +791,11 @@ export default function App() {
 
       playVoteSound();
       const icon = giftIcon || (side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon);
+      setLastVoteTimestamp(Date.now());
+      setLastVoteSide(side);
+      setLastVoteActionText(actionText);
+      setLastVoteGiftIcon(icon);
+      setLastVoteAmount(amount);
       spawnReaction(icon, side);
 
       if (amount >= 10) {
@@ -1087,30 +1118,41 @@ export default function App() {
   };
 
   const handleResetVictoryScore = async () => {
-    const confirmed = window.confirm(
-      'Deseja realmente zerar o placar geral de vitórias da série?'
-    );
-    if (confirmed) {
-      const resetScore = { left: 0, right: 0 };
-      setVictoryScore(resetScore);
-      saveVictoryScore(resetScore);
+    const now = Date.now();
+    lastResetTimestampRef.current = now;
+    const resetScore = { left: 0, right: 0 };
+    setVictoryScore(resetScore);
+    saveVictoryScore(resetScore);
 
-      saveGameStateToFirestore({
-        victoryScore: resetScore,
-      }).catch(() => {});
+    broadcastSync({
+      type: 'UPDATE_VICTORY_SCORE',
+      victoryScore: resetScore,
+    });
 
-      try {
-        await fetch('/api/reset-series', { method: 'POST' });
-      } catch (e) {
-        console.error('Erro ao zerar série no servidor', e);
-      }
+    try {
+      await fetch('/api/reset-series', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timestamp: now }),
+      });
+    } catch (e) {
+      console.error('Erro ao zerar placar no servidor', e);
     }
+
+    saveGameStateToFirestore({
+      victoryScore: resetScore,
+      updatedAt: now,
+    }).catch(() => {});
   };
 
   // Atualização direta de pontos via Painel ADM
   const handleUpdatePoints = useCallback(async (newLeft: number, newRight: number) => {
     const l = Math.max(0, newLeft);
     const r = Math.max(0, newRight);
+    const now = Date.now();
+    if (l === 0 && r === 0) {
+      lastResetTimestampRef.current = now;
+    }
     pointsRef.current.left = l;
     pointsRef.current.right = r;
     setLeftPoints(l);
@@ -1131,18 +1173,19 @@ export default function App() {
       rightGifts: pointsRef.current.rightGifts,
     });
 
-    saveGameStateToFirestore({
-      leftPoints: l,
-      rightPoints: r,
-    }).catch(() => {});
-
     try {
-      await fetch('/api/state/points', {
+      await fetch('/api/points', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leftPoints: l, rightPoints: r }),
       });
     } catch (_) {}
+
+    saveGameStateToFirestore({
+      leftPoints: l,
+      rightPoints: r,
+      updatedAt: now,
+    }).catch(() => {});
   }, []);
 
   // TikTok LIVE Backend Actions
@@ -1342,36 +1385,45 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. CENTER SECTION: DUAL COLUMNS (SCOREBOARDS + URNAS + WOODEN DESK) */}
-      <main className="w-full max-w-md flex-1 flex flex-row items-center justify-center gap-1.5 sm:gap-3 px-1.5 sm:px-2 my-auto overflow-y-auto sm:overflow-hidden min-h-0">
-        {/* Left Urna Column */}
-        <UrnaMachine
-          candidate={leftCandidate}
-          points={leftPoints}
-          giftsCount={leftGiftsCount}
-          percentage={leftPct}
-          commentCount={leftCommentProgress}
-          isLeading={leftPoints > rightPoints}
-          isRoundOver={isRoundOver}
-          onVote={handleVote}
-          lastVoteTimestamp={lastLeftVoteTimestamp}
-          lastVoteUser={lastLeftUser}
-          lastVoteText={lastLeftText}
-        />
+      {/* 2. CENTER SECTION: CANDIDATE BOXES (PHOTO + NAME + GIFTS DIRECTLY BELOW) & SINGLE URNA */}
+      <main className="w-full max-w-md flex-1 flex flex-col items-center justify-between gap-1 sm:gap-1.5 px-1 sm:px-2 my-auto overflow-y-auto min-h-0">
+        {/* Top: Left & Right Candidate Boxes with Gifts List directly below each box */}
+        <div className="w-full flex flex-row items-start justify-center gap-1.5 sm:gap-2.5">
+          <CandidateBox
+            side="left"
+            candidate={leftCandidate}
+            points={leftPoints}
+            giftsCount={leftGiftsCount}
+            percentage={leftPct}
+            isLeading={leftPoints > rightPoints}
+            onVote={handleVote}
+            lastVoteUser={lastLeftUser}
+            lastVoteText={lastLeftText}
+          />
 
-        {/* Right Urna Column */}
+          <CandidateBox
+            side="right"
+            candidate={rightCandidate}
+            points={rightPoints}
+            giftsCount={rightGiftsCount}
+            percentage={rightPct}
+            isLeading={rightPoints > leftPoints}
+            onVote={handleVote}
+            lastVoteUser={lastRightUser}
+            lastVoteText={lastRightText}
+          />
+        </div>
+
+        {/* Bottom: UMA URNA ELETRÔNICA SÓ (13 Lula, 22 Bolsonaro, mostra o presente e pra quem é) */}
         <UrnaMachine
-          candidate={rightCandidate}
-          points={rightPoints}
-          giftsCount={rightGiftsCount}
-          percentage={rightPct}
-          commentCount={rightCommentProgress}
-          isLeading={rightPoints > leftPoints}
-          isRoundOver={isRoundOver}
+          leftCandidate={leftCandidate}
+          rightCandidate={rightCandidate}
           onVote={handleVote}
-          lastVoteTimestamp={lastRightVoteTimestamp}
-          lastVoteUser={lastRightUser}
-          lastVoteText={lastRightText}
+          lastVoteTimestamp={lastVoteTimestamp}
+          lastVoteSide={lastVoteSide}
+          lastVoteText={lastVoteActionText}
+          lastVoteGiftIcon={lastVoteGiftIcon}
+          lastVoteAmount={lastVoteAmount}
         />
       </main>
 

@@ -165,7 +165,7 @@ export const VictoryModal: React.FC<VictoryModalProps> = ({
         <div className="w-full my-2 p-3 rounded-2xl bg-black/90 border-2 border-yellow-400/80 shadow-xl flex flex-col items-center">
           <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-yellow-300 mb-1">
             <Trophy className="w-3.5 h-3.5 text-yellow-400" />
-            <span>PLACAR GERAL DE VITÓRIAS</span>
+            <span>PLACAR</span>
           </div>
           <div className="flex items-center gap-4 font-digital font-black text-2xl">
             <div className="flex items-center gap-1.5 text-red-400">

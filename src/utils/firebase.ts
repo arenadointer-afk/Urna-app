@@ -48,11 +48,56 @@ export interface FirestoreErrorInfo {
   };
 }
 
+// Circuit breaker for Firestore free tier write quota
+let isFirestoreQuotaExceeded =
+  typeof window !== 'undefined' &&
+  (localStorage.getItem('firestore_quota_exceeded') === 'true' ||
+    sessionStorage.getItem('firestore_quota_exceeded') === 'true');
+let quotaWarningLogged = false;
+
+export function checkQuotaError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  if (
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('quota metric') ||
+    msg.includes('8 RESOURCE_EXHAUSTED') ||
+    msg.includes('resource-exhausted')
+  ) {
+    if (!isFirestoreQuotaExceeded) {
+      isFirestoreQuotaExceeded = true;
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('firestore_quota_exceeded', 'true');
+          sessionStorage.setItem('firestore_quota_exceeded', 'true');
+        } catch (_) {}
+      }
+      if (!quotaWarningLogged) {
+        quotaWarningLogged = true;
+        console.warn(
+          '[Firebase] Cota diária gratuita de gravações do Firestore atingida. Modo local/servidor ativo (o jogo continua 100% funcional via servidor Node.js, SSE e storage).'
+        );
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 export function handleFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
 ) {
+  if (checkQuotaError(error)) {
+    return {
+      error: 'RESOURCE_EXHAUSTED',
+      operationType,
+      path,
+      authInfo: {},
+    };
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -76,29 +121,35 @@ export function handleFirestoreError(
 
 // Initial Connection Test as required by Skill
 async function testConnection() {
+  if (isFirestoreQuotaExceeded) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
+    if (checkQuotaError(error)) return;
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('[Firebase] Verifique a conexão com o Firebase Firestore.');
     }
   }
 }
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !isFirestoreQuotaExceeded) {
   testConnection();
 }
 
 const GAME_STATE_PATH = 'game_state';
 const GAME_STATE_DOC_ID = 'current';
 
+let saveGameStateDebounceTimer: any = null;
+let pendingStateToSave: any = null;
+
 /**
  * Salva ou atualiza o estado geral do jogo no Firestore (acessível por qualquer dispositivo)
  */
 export async function saveGameStateToFirestore(state: any) {
+  if (isFirestoreQuotaExceeded) return;
   try {
     const docRef = doc(db, GAME_STATE_PATH, GAME_STATE_DOC_ID);
     const cleanState: Record<string, any> = {
-      updatedAt: Date.now(),
+      updatedAt: state.updatedAt || Date.now(),
     };
 
     if (typeof state.roundNumber === 'number') cleanState.roundNumber = state.roundNumber;
@@ -203,6 +254,7 @@ export async function pushLiveEventToFirestore(event: {
   isEpic?: boolean;
   clientId?: string;
 }) {
+  if (isFirestoreQuotaExceeded) return;
   try {
     const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const eventRef = doc(db, 'live_events', id);
@@ -220,6 +272,7 @@ export async function pushLiveEventToFirestore(event: {
       timestamp: Date.now(),
     });
   } catch (error) {
+    if (checkQuotaError(error)) return;
     handleFirestoreError(error, OperationType.WRITE, 'live_events');
   }
 }
@@ -265,6 +318,7 @@ export function subscribeToLiveEventsFromFirestore(onEvent: (event: any) => void
       });
     },
     (error) => {
+      if (checkQuotaError(error)) return;
       handleFirestoreError(error, OperationType.GET, 'live_events');
     }
   );
@@ -282,6 +336,7 @@ export async function pushChatMessageToFirestore(msg: {
   giftIcon?: string;
   points?: number;
 }) {
+  if (isFirestoreQuotaExceeded) return;
   try {
     const id = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const docRef = doc(db, 'chat_messages', id);
@@ -297,6 +352,7 @@ export async function pushChatMessageToFirestore(msg: {
       timestamp: Date.now(),
     });
   } catch (error) {
+    if (checkQuotaError(error)) return;
     handleFirestoreError(error, OperationType.WRITE, 'chat_messages');
   }
 }
@@ -317,6 +373,7 @@ export function subscribeToChatMessagesFromFirestore(onMessages: (msgs: any[]) =
       }
     },
     (error) => {
+      if (checkQuotaError(error)) return;
       handleFirestoreError(error, OperationType.GET, 'chat_messages');
     }
   );

@@ -84,18 +84,8 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
 
       {/* Main Top Center Card: Cronômetro & Selo de Liderança */}
       <div className="w-full bg-gradient-to-b from-slate-900/90 via-slate-900/95 to-slate-950/95 border-2 border-slate-700/70 rounded-2xl p-3 shadow-2xl backdrop-blur-md flex flex-col items-center">
-        {/* Timer & Difference Row */}
-        <div className="flex items-center justify-between w-full mb-1">
-          {/* Total de Votos */}
-          <div className="flex flex-col items-start">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              TOTAL DE VOTOS
-            </span>
-            <span className="text-lg sm:text-xl font-black font-digital text-amber-400 tracking-wider">
-              {totalPoints}
-            </span>
-          </div>
-
+        {/* Timer Row */}
+        <div className="flex items-center justify-center w-full mb-1">
           {/* Central Animated Countdown Timer (00:35) */}
           <div className="flex flex-col items-center">
             <div
@@ -111,19 +101,9 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               Tempo Restante
             </span>
           </div>
-
-          {/* Diferença */}
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-              DIFERENÇA
-            </span>
-            <span className="text-lg sm:text-xl font-black font-digital text-white tracking-wider">
-              {difference}
-            </span>
-          </div>
         </div>
 
-        {/* Dynamic Leader Status Badge */}
+        {/* Dynamic Leader Status Badge (only when someone leads, no tudo igual) */}
         <div className="my-1">
           {leader === 'left' && (
             <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-red-600/90 text-white font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-red-400 shadow-lg shadow-red-600/50 animate-bounce">
@@ -137,13 +117,6 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300" />
               <span>{rightCandidate.number} NA FRENTE!</span>
               <Flame className="w-4 h-4 text-yellow-300 fill-yellow-300" />
-            </div>
-          )}
-          {leader === 'tied' && (
-            <div className="flex items-center gap-2 px-4 py-1 rounded-full bg-amber-500/90 text-zinc-950 font-black text-xs sm:text-sm uppercase tracking-wider border-2 border-amber-300 shadow-lg shadow-amber-500/50 animate-pulse">
-              <Zap className="w-4 h-4 fill-zinc-950" />
-              <span>EMPATE DISPUTADO! MANDE PRESENTE!</span>
-              <Zap className="w-4 h-4 fill-zinc-950" />
             </div>
           )}
         </div>

@@ -9,12 +9,33 @@ import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
 import { TikTokLiveConnection } from 'tiktok-live-connector';
 
+// Safe process handlers to prevent dev server crash from background socket/network errors
+process.on('uncaughtException', (err) => {
+  console.warn('[Server] Uncaught exception caught safely:', err?.message || err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('[Server] Unhandled rejection caught safely:', reason);
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const STATE_FILE = path.resolve(__dirname, 'server_state.json');
 
 // Initialize Firebase Firestore for Cloud Persistence across devices
 let firestoreDb: any = null;
+let isFirestoreQuotaExceeded = false;
+
+function isQuotaError(err: any): boolean {
+  const msg = err?.message || String(err);
+  return (
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.includes('Quota limit exceeded') ||
+    msg.includes('quota metric') ||
+    msg.includes('8 RESOURCE_EXHAUSTED')
+  );
+}
+
 try {
   const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
   if (fs.existsSync(configPath)) {
@@ -134,30 +155,7 @@ let serverState: ServerGameState = {
   isRoundOver: false,
   winner: null,
   resetCountdown: 5,
-  chatMessages: [
-    {
-      id: 'm1',
-      username: '@Lucimara',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
-      text: 'Sorvete (+1 ponto)',
-      side: 'right',
-      timestamp: Date.now() - 4000,
-      isGift: true,
-      giftIcon: '🍦',
-      points: 1,
-    },
-    {
-      id: 'm2',
-      username: '@Mara',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-      text: 'Rosa (+1 ponto)',
-      side: 'left',
-      timestamp: Date.now() - 2000,
-      isGift: true,
-      giftIcon: '🌹',
-      points: 1,
-    },
-  ],
+  chatMessages: [],
   tiktokUsername: 'leonardosutello',
   botEnabled: false,
 };
@@ -188,11 +186,16 @@ function saveStateToDisk() {
       console.error('[Server] Erro ao salvar estado no disco:', e);
     }
 
-    if (firestoreDb) {
+    if (firestoreDb && !isFirestoreQuotaExceeded) {
       try {
         const docRef = doc(firestoreDb, 'game_state', 'current');
         setDoc(docRef, { ...serverState, updatedAt: Date.now() }, { merge: true }).catch((err) => {
-          console.warn('[Server] Falha ao atualizar Firestore:', err?.message || err);
+          if (isQuotaError(err)) {
+            isFirestoreQuotaExceeded = true;
+            console.warn('[Server] Firestore quota de gravação excedida. Operando com armazenamento local e SSE (100% estável).');
+          } else {
+            console.warn('[Server] Falha ao atualizar Firestore:', err?.message || err);
+          }
         });
       } catch (e) {}
     }
@@ -268,7 +271,7 @@ function addVote(
   saveStateToDisk();
 
   // Apenas grava no Firestore se o evento não tiver vindo de um cliente que já o gravou
-  if (firestoreDb && !clientId) {
+  if (firestoreDb && !clientId && !isFirestoreQuotaExceeded) {
     try {
       const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const evtRef = doc(firestoreDb, 'live_events', id);
@@ -283,10 +286,14 @@ function addVote(
         isEpic: amount >= 10,
         clientId: '',
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch((err) => {
+        if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+      });
 
       const msgRef = doc(firestoreDb, 'chat_messages', newMsg.id);
-      setDoc(msgRef, newMsg).catch(() => {});
+      setDoc(msgRef, newMsg).catch((err) => {
+        if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+      });
     } catch (e) {}
   }
 
@@ -361,7 +368,7 @@ function addComment(text: string, username?: string) {
 
   saveStateToDisk();
 
-  if (firestoreDb) {
+  if (firestoreDb && !isFirestoreQuotaExceeded) {
     try {
       const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const evtRef = doc(firestoreDb, 'live_events', id);
@@ -371,7 +378,9 @@ function addComment(text: string, username?: string) {
         comment: trimmed,
         username: author,
         timestamp: Date.now(),
-      }).catch(() => {});
+      }).catch((err) => {
+        if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+      });
     } catch (e) {}
   }
 
@@ -586,6 +595,10 @@ app.post('/api/victory-score', (req: Request, res: Response) => {
 // 8. Reset Victory Score
 app.post('/api/reset-series', (_req: Request, res: Response) => {
   serverState.victoryScore = { left: 0, right: 0 };
+  (serverState as any).updatedAt = Date.now();
+  try {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(serverState, null, 2), 'utf-8');
+  } catch (_) {}
   saveStateToDisk();
   broadcastToClients({
     type: 'STATE_SYNC',
@@ -635,18 +648,21 @@ app.post('/api/vote', (req: Request, res: Response) => {
   res.status(400).json({ error: 'Lado inválido' });
 });
 
-// 9.1 Direct Points Update (from Admin Panel)
-app.post('/api/state/points', (req: Request, res: Response) => {
+// 9.1 Direct Points Update (from Admin Panel - supports both /api/points and /api/state/points)
+const handlePointsUpdate = (req: Request, res: Response) => {
   const { leftPoints, rightPoints } = req.body;
   if (typeof leftPoints === 'number') serverState.leftPoints = Math.max(0, leftPoints);
   if (typeof rightPoints === 'number') serverState.rightPoints = Math.max(0, rightPoints);
+  (serverState as any).updatedAt = Date.now();
   saveStateToDisk();
   broadcastToClients({
     type: 'STATE_SYNC',
     state: serverState,
   });
   res.json({ success: true, state: serverState });
-});
+};
+app.post('/api/points', handlePointsUpdate);
+app.post('/api/state/points', handlePointsUpdate);
 
 // 10. Chat Trigger
 app.post('/api/chat', (req: Request, res: Response) => {
@@ -699,12 +715,20 @@ app.get('/api/tiktok/status', (_req: Request, res: Response) => {
   });
 });
 
+// Concurrency guard for TikTok connection
+let isConnectingTikTok = false;
+
 // Reusable TikTok Live Connection Handler
 async function connectToTikTok(targetUsername: string = 'leonardosutello'): Promise<{ success: boolean; message: string; status?: string }> {
   const cleanUsername = (targetUsername || 'leonardosutello').replace(/^@/, '').trim();
   if (!cleanUsername) {
     return { success: false, message: 'Nome de usuário vazio' };
   }
+
+  if (isConnectingTikTok) {
+    return { success: false, message: 'Conexão já em andamento' };
+  }
+  isConnectingTikTok = true;
 
   if (tiktokLiveConnection) {
     try {
@@ -897,6 +921,8 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
       lastError: errorText,
     });
     return { success: false, message: errorText };
+  } finally {
+    isConnectingTikTok = false;
   }
 }
 
@@ -981,8 +1007,7 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        host: HOST,
-        port: PORT,
+        hmr: process.env.DISABLE_HMR === 'true' ? false : undefined,
       },
       appType: 'spa',
     });
@@ -995,37 +1020,54 @@ async function startServer() {
     });
   }
 
-  // Carrega estado mais recente gravado no Firebase Firestore
-  if (firestoreDb) {
-    try {
-      const docRef = doc(firestoreDb, 'game_state', 'current');
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        const cloudData = snap.data();
-        serverState = { ...serverState, ...cloudData };
-        console.log('[Server] Estado restaurado do Firebase Firestore com sucesso!');
-      }
-    } catch (e) {
-      console.warn('[Server] Falha ao carregar estado do Firestore na inicialização:', e);
-    }
-  }
-
-  app.listen(PORT, HOST, () => {
+  const server = app.listen(PORT, HOST, () => {
     console.log(`Urna TikTok LIVE rodando em http://${HOST}:${PORT}`);
 
-    // Conexão automática inicial ao perfil fixo @leonardosutello
+    // Carrega estado mais recente gravado no Firebase Firestore em segundo plano (sem bloquear abertura imediata da porta 3000)
+    if (firestoreDb) {
+      try {
+        const docRef = doc(firestoreDb, 'game_state', 'current');
+        getDoc(docRef)
+          .then((snap) => {
+            if (snap.exists()) {
+              const cloudData = snap.data();
+              serverState = { ...serverState, ...cloudData };
+              console.log('[Server] Estado restaurado do Firebase Firestore com sucesso!');
+            }
+          })
+          .catch((e) => {
+            console.warn('[Server] Falha ao carregar estado do Firestore na inicialização:', e?.message || e);
+          });
+      } catch (e) {
+        console.warn('[Server] Falha síncrona ao consultar Firestore:', e);
+      }
+    }
+
+    // Conexão inicial com delay seguro para estabilização do container
     setTimeout(() => {
       console.log(`[TikTok LIVE] Conectando automaticamente ao perfil fixo @${currentUsername}...`);
       connectToTikTok(currentUsername).catch(() => {});
-    }, 2000);
+    }, 4000);
 
     // Verificador contínuo: reconecta automaticamente assim que o streamer abrir a live no TikTok
     setInterval(() => {
       if (connectionStatus === 'disconnected' || connectionStatus === 'error') {
         connectToTikTok(currentUsername).catch(() => {});
       }
-    }, 25000);
+    }, 30000);
   });
+
+  const cleanup = () => {
+    if (tiktokLiveConnection) {
+      try {
+        tiktokLiveConnection.disconnect();
+      } catch (e) {}
+    }
+    server.close();
+  };
+
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
 }
 
 startServer().catch((err) => {
