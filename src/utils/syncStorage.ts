@@ -1,5 +1,6 @@
 import { Candidate, BotSettings, StreamSettings, PresetDuel } from '../types';
 import { PRESET_DUELS } from './presets';
+import { MusicTrackType } from './audio';
 
 export interface VictoryScore {
   left: number;
@@ -42,6 +43,7 @@ export type SyncMessage =
   | { type: 'UPDATE_TIME'; timeLeft: number; isPaused: boolean; roundDuration?: number }
   | { type: 'UPDATE_VICTORY_SCORE'; victoryScore: VictoryScore }
   | { type: 'UPDATE_ROUND_NUMBER'; roundNumber: number }
+  | { type: 'UPDATE_MUSIC'; track: MusicTrackType; customUrl?: string }
   | { type: 'UPDATE_BOT_SETTINGS'; botSettings: BotSettings }
   | { type: 'UPDATE_STREAM_SETTINGS'; streamSettings: StreamSettings }
   | { type: 'RESET_ROUND' }

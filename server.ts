@@ -597,6 +597,37 @@ app.post('/api/reset-series', (_req: Request, res: Response) => {
   res.json({ success: true, victoryScore: serverState.victoryScore });
 });
 
+// 8.1 Update Round Number
+app.post('/api/round-number', (req: Request, res: Response) => {
+  const { roundNumber } = req.body;
+  const num = parseInt(roundNumber, 10);
+  if (!isNaN(num) && num >= 1) {
+    serverState.roundNumber = num;
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, roundNumber: serverState.roundNumber });
+  }
+  res.status(400).json({ error: 'Número de rodada inválido' });
+});
+
+// 8.2 Update Music Track
+app.post('/api/music', (req: Request, res: Response) => {
+  const { musicTrack } = req.body;
+  if (musicTrack) {
+    (serverState as any).musicTrack = musicTrack;
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, musicTrack: (serverState as any).musicTrack });
+  }
+  res.status(400).json({ error: 'Música inválida' });
+});
+
 // 9. Vote Trigger
 app.post('/api/vote', (req: Request, res: Response) => {
   const { side, amount, giftName, giftIcon, username } = req.body;
@@ -770,20 +801,31 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
       const diamondCount = (data.diamondCount || 1) * repeatCount;
       const giftName = data.giftName || 'Presente';
       const user = data.uniqueId || data.nickname || '@fa_live';
-
-      const leftGiftName = serverState.leftCandidate.primaryGift.name.toLowerCase();
-      const rightGiftName = serverState.rightCandidate.primaryGift.name.toLowerCase();
       const lowerGift = giftName.toLowerCase();
 
-      if (lowerGift.includes(leftGiftName) || lowerGift.includes('rosa') || lowerGift.includes('rose')) {
+      const leftGifts = [
+        serverState.leftCandidate.primaryGift?.name?.toLowerCase() || 'rosa',
+        ...(serverState.leftCandidate.bonusGifts || []).map((g: any) => g.name.toLowerCase()),
+        'rosa', 'rose', 'coração', 'heart', 'estrela', 'star', 'galáxia', 'galaxy'
+      ];
+      const rightGifts = [
+        serverState.rightCandidate.primaryGift?.name?.toLowerCase() || 'sorvete',
+        ...(serverState.rightCandidate.bonusGifts || []).map((g: any) => g.name.toLowerCase()),
+        'sorvete', 'ice cream', 'icecream', 'donut', 'rosquinha', 'boné', 'cap', 'leão', 'lion'
+      ];
+
+      const matchesLeft = leftGifts.some((g) => g && lowerGift.includes(g));
+      const matchesRight = rightGifts.some((g) => g && lowerGift.includes(g));
+
+      if (matchesLeft && !matchesRight) {
         addVote('left', repeatCount, giftName, serverState.leftCandidate.primaryGift.icon, user);
-      } else if (lowerGift.includes(rightGiftName) || lowerGift.includes('sorvete') || lowerGift.includes('ice cream')) {
+      } else if (matchesRight && !matchesLeft) {
         addVote('right', repeatCount, giftName, serverState.rightCandidate.primaryGift.icon, user);
-      } else if (diamondCount >= 10 || lowerGift.includes('leão') || lowerGift.includes('lion') || lowerGift.includes('galáxia')) {
-        const side = Math.random() > 0.5 ? 'left' : 'right';
-        addVote(side, diamondCount >= 50 ? 100 : diamondCount, giftName, '🦁', user);
+      } else if (diamondCount >= 10 || lowerGift.includes('leão') || lowerGift.includes('galáxia')) {
+        const side = serverState.leftPoints <= serverState.rightPoints ? 'left' : 'right';
+        addVote(side, diamondCount >= 50 ? 100 : diamondCount, giftName, '🎁', user);
       } else {
-        const side = Math.random() > 0.5 ? 'left' : 'right';
+        const side = serverState.leftPoints <= serverState.rightPoints ? 'left' : 'right';
         addVote(side, repeatCount, giftName, side === 'left' ? serverState.leftCandidate.primaryGift.icon : serverState.rightCandidate.primaryGift.icon, user);
       }
 

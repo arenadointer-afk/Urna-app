@@ -79,6 +79,8 @@ interface AdminPanelProps {
   musicVolume: number;
   onChangeMusicVolume: (volume: number) => void;
   initialTab?: 'first-live' | 'boosters' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music';
+  roundNumber?: number;
+  onUpdateRoundNumber?: (num: number) => void;
   victoryScore: VictoryScore;
   onUpdateVictoryScore: (score: VictoryScore) => void;
   onResetVictoryScore: () => void;
@@ -174,6 +176,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   musicVolume,
   onChangeMusicVolume,
   initialTab,
+  roundNumber = 1,
+  onUpdateRoundNumber,
   victoryScore,
   onUpdateVictoryScore,
   onResetVictoryScore,
@@ -193,6 +197,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [copiedLiveUrl, setCopiedLiveUrl] = useState(false);
   const [copiedAdminUrl, setCopiedAdminUrl] = useState(false);
   const [customTimeInput, setCustomTimeInput] = useState(String(roundDuration));
+  const [customRoundInput, setCustomRoundInput] = useState(String(roundNumber));
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false);
   const [testSuccessMessage, setTestSuccessMessage] = useState('');
   const [customAudioInfo, setCustomAudioInfo] = useState(() => getCustomAudioInfo());
@@ -1341,6 +1346,81 @@ tiktokLiveConnection.on('gift', data => {
                   <RotateCcw className="w-4 h-4" />
                   <span>REINICIAR RODADA ATUAL</span>
                 </button>
+              </div>
+
+              {/* CONTROLE DO NÚMERO DE RODADAS JÁ REALIZADAS */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/40 border-2 border-amber-500/60 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🔢</span>
+                    <div>
+                      <h4 className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                        Número de Rodadas Realizadas
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        Altere manualmente a contagem de rodadas da live (exibida no topo e nas estatísticas).
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 border border-amber-400 text-amber-300 font-digital font-black text-base shadow">
+                    <span>Rodada #{roundNumber}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateRoundNumber && onUpdateRoundNumber(Math.max(1, roundNumber - 1))}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                  >
+                    <span>- 1 Rodada</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onUpdateRoundNumber && onUpdateRoundNumber(roundNumber + 1)}
+                    className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                  >
+                    <span>+ 1 Rodada</span>
+                  </button>
+
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <input
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={customRoundInput}
+                      onChange={(e) => setCustomRoundInput(e.target.value)}
+                      placeholder="Ex: 5"
+                      className="w-20 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-digital font-bold text-center text-white focus:outline-none focus:border-amber-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parsed = parseInt(customRoundInput, 10);
+                        if (!isNaN(parsed) && parsed >= 1 && onUpdateRoundNumber) {
+                          onUpdateRoundNumber(parsed);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-slate-600 cursor-pointer active:scale-95 transition-all"
+                    >
+                      Definir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onUpdateRoundNumber) {
+                          onUpdateRoundNumber(1);
+                          setCustomRoundInput('1');
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-300 font-bold text-[11px] border border-red-800/60 cursor-pointer active:scale-95 transition-all"
+                      title="Zerar contagem para rodada 1"
+                    >
+                      Resetar p/ 1
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Explicação Importante: Rodadas vs Batalha Fixa Acumulativa */}

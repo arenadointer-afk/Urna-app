@@ -25,6 +25,8 @@ import {
   initAudioContext,
   playVoteSound,
   MusicTrackType,
+  getSavedMusicTrack,
+  saveSelectedMusicTrack,
 } from './utils/audio';
 import {
   getSavedCandidate,
@@ -110,9 +112,46 @@ export default function App() {
   >('boosters');
   const [soundActive, setSoundActive] = useState(true);
 
-  // Background Music State
-  const [musicTrack, setMusicTrack] = useState<MusicTrackType>('off');
+  // Background Music State (Persistente no F5)
+  const [musicTrack, setMusicTrack] = useState<MusicTrackType>(() => getSavedMusicTrack());
   const [musicVolumeState, setMusicVolumeState] = useState(0.5);
+
+  // Atomic mutable ref to prevent concurrent gift race conditions
+  const pointsRef = useRef({
+    left: getSavedPoints().leftPoints,
+    right: getSavedPoints().rightPoints,
+    leftGifts: getSavedPoints().leftGifts,
+    rightGifts: getSavedPoints().rightGifts,
+  });
+
+  // Keep ref synchronized
+  useEffect(() => {
+    pointsRef.current = {
+      left: leftPoints,
+      right: rightPoints,
+      leftGifts: leftGiftsCount,
+      rightGifts: rightGiftsCount,
+    };
+  }, [leftPoints, rightPoints, leftGiftsCount, rightGiftsCount]);
+
+  // Autoplay / Unlock da música salva no primeiro toque/clique do streamer ou espectador na tela
+  useEffect(() => {
+    const handleFirstUserInteraction = () => {
+      initAudioContext();
+      setHasInteractedAudio(true);
+      const saved = getSavedMusicTrack();
+      if (saved && saved !== 'off') {
+        playMusicTrack(saved);
+      }
+    };
+
+    window.addEventListener('click', handleFirstUserInteraction, { once: true });
+    window.addEventListener('touchstart', handleFirstUserInteraction, { once: true });
+    return () => {
+      window.removeEventListener('click', handleFirstUserInteraction);
+      window.removeEventListener('touchstart', handleFirstUserInteraction);
+    };
+  }, []);
 
   // TikTok LIVE State (Perfil Fixo Oficial: @leonardosutello)
   const [tiktokUsername, setTiktokUsername] = useState<string>('leonardosutello');
@@ -172,7 +211,8 @@ export default function App() {
   const lastServerTickRef = useRef<number>(0);
 
   // Sincroniza estado vindo do servidor e grava no disco / localStorage
-  const applyServerState = useCallback((state: any) => {
+  // Protegido contra sobreposição acidental de timeLeft e zeramento prematuro de pontos
+  const applyServerState = useCallback((state: any, options?: { allowTimeSync?: boolean; isAuthoritativeReset?: boolean }) => {
     if (!state) return;
     if (state.leftCandidate) {
       setLeftCandidate(state.leftCandidate);
@@ -190,7 +230,8 @@ export default function App() {
       setRoundDuration(state.roundDuration);
       saveRoundDuration(state.roundDuration);
     }
-    if (typeof state.timeLeft === 'number') {
+    // SÓ atualiza timeLeft se for ação explícita (início, reset, ou add time), NUNCA por snapshots passivos de presentes!
+    if (options?.allowTimeSync && typeof state.timeLeft === 'number') {
       setTimeLeft(state.timeLeft);
       saveTimeLeft(state.timeLeft);
     }
@@ -199,27 +240,33 @@ export default function App() {
       saveIsPaused(state.isPaused);
     }
     if (typeof state.leftPoints === 'number') {
-      setLeftPoints((prev) => (state.isRoundOver ? state.leftPoints : Math.max(prev, state.leftPoints)));
-    }
-    if (typeof state.rightPoints === 'number') {
-      setRightPoints((prev) => (state.isRoundOver ? state.rightPoints : Math.max(prev, state.rightPoints)));
-    }
-    if (typeof state.leftGiftsCount === 'number') {
-      setLeftGiftsCount((prev) => (state.isRoundOver ? state.leftGiftsCount : Math.max(prev, state.leftGiftsCount)));
-    }
-    if (typeof state.rightGiftsCount === 'number') {
-      setRightGiftsCount((prev) => (state.isRoundOver ? state.rightGiftsCount : Math.max(prev, state.rightGiftsCount)));
-    }
-    if (typeof state.leftPoints === 'number' && typeof state.rightPoints === 'number') {
-      savePoints({
-        leftPoints: state.leftPoints,
-        rightPoints: state.rightPoints,
-        leftGifts: state.leftGiftsCount || 0,
-        rightGifts: state.rightGiftsCount || 0,
+      setLeftPoints((prev) => {
+        const val = options?.isAuthoritativeReset ? state.leftPoints : Math.max(prev, state.leftPoints);
+        pointsRef.current.left = val;
+        return val;
       });
     }
-    if (typeof state.leftCommentProgress === 'number') setLeftCommentProgress(state.leftCommentProgress);
-    if (typeof state.rightCommentProgress === 'number') setRightCommentProgress(state.rightCommentProgress);
+    if (typeof state.rightPoints === 'number') {
+      setRightPoints((prev) => {
+        const val = options?.isAuthoritativeReset ? state.rightPoints : Math.max(prev, state.rightPoints);
+        pointsRef.current.right = val;
+        return val;
+      });
+    }
+    if (typeof state.leftGiftsCount === 'number') {
+      setLeftGiftsCount((prev) => {
+        const val = options?.isAuthoritativeReset ? state.leftGiftsCount : Math.max(prev, state.leftGiftsCount);
+        pointsRef.current.leftGifts = val;
+        return val;
+      });
+    }
+    if (typeof state.rightGiftsCount === 'number') {
+      setRightGiftsCount((prev) => {
+        const val = options?.isAuthoritativeReset ? state.rightGiftsCount : Math.max(prev, state.rightGiftsCount);
+        pointsRef.current.rightGifts = val;
+        return val;
+      });
+    }
     if (state.victoryScore) {
       setVictoryScore(state.victoryScore);
       saveVictoryScore(state.victoryScore);
@@ -228,13 +275,22 @@ export default function App() {
     if (state.lastLeftText) setLastLeftText(state.lastLeftText);
     if (state.lastRightUser) setLastRightUser(state.lastRightUser);
     if (state.lastRightText) setLastRightText(state.lastRightText);
-    if (typeof state.isRoundOver === 'boolean') setIsRoundOver(state.isRoundOver);
-    if (state.winner !== undefined) setWinner(state.winner);
+    if (options?.isAuthoritativeReset && typeof state.isRoundOver === 'boolean') {
+      setIsRoundOver(state.isRoundOver);
+    }
+    if (options?.isAuthoritativeReset && state.winner !== undefined) {
+      setWinner(state.winner);
+    }
     if (typeof state.resetCountdown === 'number') setResetCountdown(state.resetCountdown);
     if (Array.isArray(state.chatMessages)) setChatMessages(state.chatMessages);
     if (state.tiktokUsername) {
       setTiktokUsername(state.tiktokUsername);
       saveTikTokConfig({ username: state.tiktokUsername, autoConnect: true });
+    }
+    if (state.musicTrack) {
+      setMusicTrack(state.musicTrack);
+      saveSelectedMusicTrack(state.musicTrack);
+      playMusicTrack(state.musicTrack);
     }
   }, []);
 
@@ -260,6 +316,10 @@ export default function App() {
         setVictoryScore(msg.victoryScore);
       } else if (msg.type === 'UPDATE_ROUND_NUMBER') {
         setRoundNumber(msg.roundNumber);
+      } else if (msg.type === 'UPDATE_MUSIC') {
+        setMusicTrack(msg.track);
+        saveSelectedMusicTrack(msg.track);
+        playMusicTrack(msg.track, msg.customUrl);
       } else if (msg.type === 'RESET_ROUND') {
         setLeftPoints(0);
         setRightPoints(0);
@@ -573,8 +633,41 @@ export default function App() {
 
   const handleMusicChange = (track: MusicTrackType, customUrl?: string) => {
     setMusicTrack(track);
+    saveSelectedMusicTrack(track);
     playMusicTrack(track, customUrl);
+    broadcastSync({ type: 'UPDATE_MUSIC', track, customUrl });
+    saveGameStateToFirestore({ musicTrack: track }).catch(() => {});
+    try {
+      fetch('/api/music', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ musicTrack: track }),
+      }).catch(() => {});
+    } catch (_) {}
   };
+
+  // Atalho de Teclado durante a Live no PC: Pressionar [M] troca a música instantaneamente!
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        const order: MusicTrackType[] = ['suspense', 'hype', 'marchinha', 'retro', 'off'];
+        const currentIndex = order.indexOf(musicTrack);
+        const nextIndex = (currentIndex + 1) % order.length;
+        handleMusicChange(order[nextIndex]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [musicTrack]);
 
   const handleVolumeChange = (volume: number) => {
     setMusicVolumeState(volume);
@@ -597,7 +690,24 @@ export default function App() {
     }
   };
 
+  // Salva e atualiza o número de rodadas já realizadas
+  const handleUpdateRoundNumber = async (num: number) => {
+    const next = Math.max(1, num);
+    setRoundNumber(next);
+    saveRoundNumber(next);
+    broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: next });
+    saveGameStateToFirestore({ roundNumber: next }).catch(() => {});
+    try {
+      await fetch('/api/round-number', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roundNumber: next }),
+      });
+    } catch (_) {}
+  };
+
   // Main Vote Handler: salva no Firebase Firestore e no servidor
+  // Utiliza pointsRef para cálculo 100% atômico e imune a presentes simultâneos de ambos os lados
   const handleVote = useCallback(
     async (
       side: 'left' | 'right',
@@ -612,28 +722,47 @@ export default function App() {
         ? `${giftName || 'Presente'} • +${amount} pontos`
         : `${giftName || 'Voto'} • +${amount} ponto`;
 
-      let newLeftPoints = leftPoints;
-      let newRightPoints = rightPoints;
-      let newLeftGifts = leftGiftsCount;
-      let newRightGifts = rightGiftsCount;
+      let nextLeft = pointsRef.current.left;
+      let nextRight = pointsRef.current.right;
+      let nextLeftGifts = pointsRef.current.leftGifts;
+      let nextRightGifts = pointsRef.current.rightGifts;
 
       if (side === 'left') {
-        newLeftPoints += amount;
-        if (isGift) newLeftGifts += (amount > 1 ? amount : 1);
-        setLeftPoints(newLeftPoints);
-        setLeftGiftsCount(newLeftGifts);
+        nextLeft += amount;
+        if (isGift) nextLeftGifts += (amount > 1 ? amount : 1);
+        pointsRef.current.left = nextLeft;
+        pointsRef.current.leftGifts = nextLeftGifts;
+        setLeftPoints(nextLeft);
+        setLeftGiftsCount(nextLeftGifts);
         setLastLeftUser(user);
         setLastLeftText(actionText);
         setLastLeftVoteTimestamp(Date.now());
       } else {
-        newRightPoints += amount;
-        if (isGift) newRightGifts += (amount > 1 ? amount : 1);
-        setRightPoints(newRightPoints);
-        setRightGiftsCount(newRightGifts);
+        nextRight += amount;
+        if (isGift) nextRightGifts += (amount > 1 ? amount : 1);
+        pointsRef.current.right = nextRight;
+        pointsRef.current.rightGifts = nextRightGifts;
+        setRightPoints(nextRight);
+        setRightGiftsCount(nextRightGifts);
         setLastRightUser(user);
         setLastRightText(actionText);
         setLastRightVoteTimestamp(Date.now());
       }
+
+      savePoints({
+        leftPoints: nextLeft,
+        rightPoints: nextRight,
+        leftGifts: nextLeftGifts,
+        rightGifts: nextRightGifts,
+      });
+
+      broadcastSync({
+        type: 'UPDATE_POINTS',
+        leftPoints: nextLeft,
+        rightPoints: nextRight,
+        leftGifts: nextLeftGifts,
+        rightGifts: nextRightGifts,
+      });
 
       playVoteSound();
       const icon = giftIcon || (side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon);
@@ -664,10 +793,10 @@ export default function App() {
       }).catch(() => {});
 
       saveGameStateToFirestore({
-        leftPoints: newLeftPoints,
-        rightPoints: newRightPoints,
-        leftGiftsCount: newLeftGifts,
-        rightGiftsCount: newRightGifts,
+        leftPoints: nextLeft,
+        rightPoints: nextRight,
+        leftGiftsCount: nextLeftGifts,
+        rightGiftsCount: nextRightGifts,
         lastLeftUser: side === 'left' ? user : lastLeftUser,
         lastLeftText: side === 'left' ? actionText : lastLeftText,
         lastRightUser: side === 'right' ? user : lastRightUser,
@@ -694,7 +823,7 @@ export default function App() {
         // Fallback silencioso se offline
       }
     },
-    [leftCandidate, rightCandidate, leftPoints, rightPoints, leftGiftsCount, rightGiftsCount, lastLeftUser, lastLeftText, lastRightUser, lastRightText, spawnReaction]
+    [leftCandidate, rightCandidate, lastLeftUser, lastLeftText, lastRightUser, lastRightText, spawnReaction]
   );
 
   // Manual Chat Message: salva no Firebase Firestore e no servidor
@@ -1049,11 +1178,28 @@ export default function App() {
       const giftName = data?.giftName || 'Rosa';
       const repeatCount = Number(data?.repeatCount) || 1;
       const lower = giftName.toLowerCase();
-      const leftName = leftCandidate.primaryGift.name.toLowerCase();
-      const isLeft = lower.includes(leftName) || lower.includes('rosa') || lower.includes('rose');
-      const side = isLeft ? 'left' : 'right';
-      const candidate = isLeft ? leftCandidate : rightCandidate;
-      const giftIcon = candidate.primaryGift.icon || (isLeft ? '🌹' : '🍦');
+      
+      let side: 'left' | 'right' = data?.side === 'right' ? 'right' : 'left';
+      if (!data?.side) {
+        const leftGifts = [
+          leftCandidate.primaryGift?.name?.toLowerCase() || 'rosa',
+          ...(leftCandidate.bonusGifts || []).map((g) => g.name.toLowerCase()),
+          'rosa', 'rose', 'coração', 'heart', 'estrela', 'star', 'galáxia', 'galaxy'
+        ];
+        const rightGifts = [
+          rightCandidate.primaryGift?.name?.toLowerCase() || 'sorvete',
+          ...(rightCandidate.bonusGifts || []).map((g) => g.name.toLowerCase()),
+          'sorvete', 'ice cream', 'icecream', 'donut', 'rosquinha', 'boné', 'cap', 'leão', 'lion'
+        ];
+        if (rightGifts.some((g) => g && lower.includes(g))) {
+          side = 'right';
+        } else if (leftGifts.some((g) => g && lower.includes(g))) {
+          side = 'left';
+        }
+      }
+
+      const candidate = side === 'left' ? leftCandidate : rightCandidate;
+      const giftIcon = data?.giftIcon || candidate.primaryGift.icon || (side === 'left' ? '🌹' : '🍦');
 
       handleVote(side, repeatCount, giftName, giftIcon, data?.uniqueId || '@fa_nuvem');
     } else if (type === 'chat') {
@@ -1111,7 +1257,48 @@ export default function App() {
         onOpenAdmin={() => setIsPasswordModalOpen(true)}
         victoryScore={victoryScore}
         roundNumber={roundNumber}
+        onUpdateRoundNumber={handleUpdateRoundNumber}
+        musicTrack={musicTrack}
+        onChangeMusicTrack={handleMusicChange}
       />
+
+      {/* ALERTA DE RETA FINAL: SE NINGUÉM MANDAR MAIS PONTO, QUEM TÁ NA FRENTE VAI GANHAR */}
+      {timeLeft > 0 && timeLeft <= 20 && !isRoundOver && (
+        <div className="w-full max-w-md px-2 my-0.5 animate-pulse z-30">
+          <div
+            className={`w-full py-1.5 px-3 rounded-2xl border-2 shadow-2xl flex items-center justify-between text-white font-black text-xs ${
+              leftPoints > rightPoints
+                ? 'bg-gradient-to-r from-red-950 via-red-900 to-amber-950 border-red-500 shadow-red-500/40'
+                : rightPoints > leftPoints
+                ? 'bg-gradient-to-r from-blue-950 via-blue-900 to-amber-950 border-blue-500 shadow-blue-500/40'
+                : 'bg-gradient-to-r from-amber-950 via-purple-900 to-amber-950 border-amber-400 shadow-amber-500/40'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xl animate-bounce shrink-0">🚨</span>
+              <div className="flex flex-col min-w-0 leading-tight">
+                <span className="text-[9px] sm:text-[10px] text-amber-300 font-extrabold uppercase tracking-tight">
+                  RETA FINAL! SE NINGUÉM ENVIAR MAIS PONTOS:
+                </span>
+                <span className="text-[11px] sm:text-[12.5px] font-black uppercase text-white truncate drop-shadow">
+                  {leftPoints > rightPoints ? (
+                    <>👑 <strong className="text-red-300">{leftCandidate.name}</strong> VAI GANHAR A RODADA!</>
+                  ) : rightPoints > leftPoints ? (
+                    <>👑 <strong className="text-blue-300">{rightCandidate.name}</strong> VAI GANHAR A RODADA!</>
+                  ) : (
+                    <>⚡ EMPATE DRAMÁTICO! QUALQUER PRESENTE DECIDE O VENCEDOR!</>
+                  )}
+                </span>
+              </div>
+            </div>
+            <div className="shrink-0 pl-2">
+              <span className="px-2.5 py-1 rounded-full bg-amber-400 text-zinc-950 font-digital font-black text-xs sm:text-sm shadow">
+                {timeLeft}s
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2. CENTER SECTION: DUAL COLUMNS (SCOREBOARDS + URNAS + WOODEN DESK) */}
       <main className="w-full max-w-md flex-1 flex flex-row items-center justify-center gap-1.5 sm:gap-3 px-1.5 sm:px-2 my-auto overflow-y-auto sm:overflow-hidden min-h-0">
@@ -1222,6 +1409,8 @@ export default function App() {
         musicVolume={musicVolumeState}
         onChangeMusicVolume={handleVolumeChange}
         initialTab={adminInitialTab}
+        roundNumber={roundNumber}
+        onUpdateRoundNumber={handleUpdateRoundNumber}
         victoryScore={victoryScore}
         onUpdateVictoryScore={handleUpdateVictoryScore}
         onResetVictoryScore={handleResetVictoryScore}

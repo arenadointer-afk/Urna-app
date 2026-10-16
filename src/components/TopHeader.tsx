@@ -1,4 +1,7 @@
+import React, { useState } from 'react';
 import { Candidate, VictoryScore } from '../types';
+import { MusicTrackType } from '../utils/audio';
+import { ChevronDown } from 'lucide-react';
 
 interface TopHeaderProps {
   leftCandidate: Candidate;
@@ -9,7 +12,18 @@ interface TopHeaderProps {
   onOpenAdmin: () => void;
   victoryScore: VictoryScore;
   roundNumber: number;
+  onUpdateRoundNumber?: (num: number) => void;
+  musicTrack?: MusicTrackType;
+  onChangeMusicTrack?: (track: MusicTrackType) => void;
 }
+
+const TRACK_OPTIONS: { id: MusicTrackType; name: string; icon: string; badge: string }[] = [
+  { id: 'suspense', name: 'Suspense Épico', icon: '🔥', badge: 'DRAMA' },
+  { id: 'hype', name: 'Plantão / Hype', icon: '🚨', badge: 'GLOBO' },
+  { id: 'marchinha', name: 'Hino Eleições', icon: '🇧🇷', badge: 'OFICIAL' },
+  { id: 'retro', name: 'Cyber Chiptune', icon: '⚡', badge: 'BATIDA' },
+  { id: 'off', name: 'Desligado (Sem Som)', icon: '🔇', badge: 'MUDO' },
+];
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   leftCandidate,
@@ -20,7 +34,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenAdmin,
   victoryScore,
   roundNumber,
+  onUpdateRoundNumber,
+  musicTrack = 'off',
+  onChangeMusicTrack,
 }) => {
+  const [isMusicMenuOpen, setIsMusicMenuOpen] = useState(false);
   const total = leftPoints + rightPoints;
   const difference = Math.abs(leftPoints - rightPoints);
 
@@ -68,24 +86,104 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
       <div className="w-full max-w-md flex items-center justify-between px-2 py-0.5 mb-1 bg-black/70 rounded-full border border-amber-500/40 shadow-lg">
         <div className="flex items-center gap-1.5 pl-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span className="text-[10px] font-black tracking-wider text-amber-400 uppercase">
-            RODADA #{roundNumber}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-black tracking-wider text-amber-400 uppercase">
+              RODADA #{roundNumber}
+            </span>
+            {onUpdateRoundNumber && (
+              <div className="flex items-center gap-0.5 ml-0.5">
+                <button
+                  type="button"
+                  onClick={() => onUpdateRoundNumber(Math.max(1, roundNumber - 1))}
+                  title="Diminuir rodada"
+                  className="w-4 h-4 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-[10px] font-bold border border-slate-700 cursor-pointer"
+                >
+                  -
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdateRoundNumber(roundNumber + 1)}
+                  title="Avançar rodada"
+                  className="w-4 h-4 rounded-full bg-amber-500/80 hover:bg-amber-400 text-zinc-950 flex items-center justify-center text-[10px] font-black border border-amber-400 cursor-pointer"
+                >
+                  +
+                </button>
+              </div>
+            )}
+          </div>
           <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-600/50 uppercase font-black tracking-tight flex items-center gap-0.5">
             <span>☁️</span> Nuvem
           </span>
         </div>
 
-        <div className="flex items-center gap-2 pr-1">
-          <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-300">
-            PLACAR DE VITÓRIAS:
+        <div className="flex items-center gap-1.5 pr-1">
+          {/* Quick Music Toggle */}
+          {onChangeMusicTrack && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsMusicMenuOpen((prev) => !prev)}
+                title="Mudar Música da Live (ou aperte a tecla M)"
+                className="px-2 py-0.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-amber-500/50 text-amber-300 font-black text-[9px] flex items-center gap-1 cursor-pointer transition-all active:scale-95 shadow"
+              >
+                <span>🎵</span>
+                <span className="capitalize text-[8.5px]">
+                  {musicTrack === 'off' ? 'Mudo' : musicTrack}
+                </span>
+                <ChevronDown className={`w-2.5 h-2.5 transition-transform ${isMusicMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isMusicMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsMusicMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-6 z-50 w-52 p-1.5 rounded-2xl bg-zinc-950/95 border-2 border-amber-500/80 shadow-2xl backdrop-blur-md flex flex-col gap-1 text-white animate-fade-in">
+                    <div className="px-2 py-1 border-b border-zinc-800 flex items-center justify-between text-[10px] text-amber-400 font-black uppercase">
+                      <span>Música de Fundo</span>
+                      <span className="text-[8px] text-slate-400 font-mono">Tecla [M]</span>
+                    </div>
+                    {TRACK_OPTIONS.map((track) => (
+                      <button
+                        key={track.id}
+                        type="button"
+                        onClick={() => {
+                          onChangeMusicTrack(track.id);
+                          setIsMusicMenuOpen(false);
+                        }}
+                        className={`px-2 py-1.5 rounded-xl text-left text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                          musicTrack === track.id
+                            ? 'bg-amber-500 text-zinc-950 font-black'
+                            : 'hover:bg-zinc-800/80 text-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>{track.icon}</span>
+                          <span>{track.name}</span>
+                        </div>
+                        <span className={`text-[8px] px-1 py-0.2 rounded font-black uppercase ${
+                          musicTrack === track.id ? 'bg-zinc-950 text-amber-300' : 'bg-zinc-800 text-zinc-400'
+                        }`}>
+                          {track.badge}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-300 hidden sm:inline">
+            PLACAR:
           </span>
           <div className="flex items-center gap-1 font-digital font-black text-xs sm:text-sm">
-            <span className="px-2 py-0.5 rounded-md bg-red-600 text-white shadow border border-red-400">
+            <span className="px-1.5 py-0.5 rounded-md bg-red-600 text-white shadow border border-red-400">
               {victoryScore.left}
             </span>
             <span className="text-yellow-400 font-extrabold text-xs">✕</span>
-            <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white shadow border border-blue-400">
+            <span className="px-1.5 py-0.5 rounded-md bg-blue-600 text-white shadow border border-blue-400">
               {victoryScore.right}
             </span>
           </div>

@@ -125,6 +125,8 @@ export async function saveGameStateToFirestore(state: any) {
     if (state.winner !== undefined) cleanState.winner = String(state.winner || 'none').slice(0, 20);
     if (typeof state.resetCountdown === 'number') cleanState.resetCountdown = state.resetCountdown;
     if (state.tiktokUsername !== undefined) cleanState.tiktokUsername = String(state.tiktokUsername).slice(0, 100);
+    if (state.musicTrack !== undefined) cleanState.musicTrack = String(state.musicTrack);
+    if (typeof state.musicVolume === 'number') cleanState.musicVolume = state.musicVolume;
 
     if (state.leftCandidate) {
       cleanState.leftCandidate = {
