@@ -198,10 +198,18 @@ export default function App() {
       setIsPaused(state.isPaused);
       saveIsPaused(state.isPaused);
     }
-    if (typeof state.leftPoints === 'number') setLeftPoints(state.leftPoints);
-    if (typeof state.rightPoints === 'number') setRightPoints(state.rightPoints);
-    if (typeof state.leftGiftsCount === 'number') setLeftGiftsCount(state.leftGiftsCount);
-    if (typeof state.rightGiftsCount === 'number') setRightGiftsCount(state.rightGiftsCount);
+    if (typeof state.leftPoints === 'number') {
+      setLeftPoints((prev) => (state.isRoundOver ? state.leftPoints : Math.max(prev, state.leftPoints)));
+    }
+    if (typeof state.rightPoints === 'number') {
+      setRightPoints((prev) => (state.isRoundOver ? state.rightPoints : Math.max(prev, state.rightPoints)));
+    }
+    if (typeof state.leftGiftsCount === 'number') {
+      setLeftGiftsCount((prev) => (state.isRoundOver ? state.leftGiftsCount : Math.max(prev, state.leftGiftsCount)));
+    }
+    if (typeof state.rightGiftsCount === 'number') {
+      setRightGiftsCount((prev) => (state.isRoundOver ? state.rightGiftsCount : Math.max(prev, state.rightGiftsCount)));
+    }
     if (typeof state.leftPoints === 'number' && typeof state.rightPoints === 'number') {
       savePoints({
         leftPoints: state.leftPoints,

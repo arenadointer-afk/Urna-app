@@ -260,8 +260,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setTimeout(() => setCopiedAdminUrl(false), 2000);
   };
 
-  if (!isOpen) return null;
-
   const [formCandidate, setFormCandidate] = useState<Candidate>(
     editingSide === 'left' ? leftCandidate : rightCandidate
   );
@@ -394,6 +392,8 @@ tiktokLiveConnection.on('gift', data => {
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2500);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
@@ -1341,6 +1341,18 @@ tiktokLiveConnection.on('gift', data => {
                   <RotateCcw className="w-4 h-4" />
                   <span>REINICIAR RODADA ATUAL</span>
                 </button>
+              </div>
+
+              {/* Explicação Importante: Rodadas vs Batalha Fixa Acumulativa */}
+              <div className="p-3.5 rounded-2xl bg-blue-950/60 border border-blue-500/50 text-blue-200 text-xs space-y-1.5 shadow">
+                <div className="flex items-center gap-1.5 font-black text-blue-300">
+                  <span className="text-sm">💡</span>
+                  <span>COMO FUNCIONA O PLACAR & POR QUE OS PONTOS ATUALIZAM:</span>
+                </div>
+                <p className="text-[11px] text-blue-100 leading-relaxed">
+                  • <strong>Com Cronômetro Ligado:</strong> O jogo funciona no <em>Sistema Oficial de Rodadas</em>. Quando o tempo ({roundDuration}s) zera, o vencedor da rodada é anunciado, o Placar de Séries soma a vitória e os pontos da rodada zeram para iniciar a próxima disputa.<br />
+                  • <strong>Quer pontos acumulativos FIXOS sem zerar?</strong> Basta clicar no botão verde <strong>"PAUSAR CRONÔMETRO"</strong> acima! Com o cronômetro pausado, os presentes acumulam sem parar durante toda a sua transmissão sem nunca sumir até você decidir reiniciar manualmente.
+                </p>
               </div>
 
               {/* Botões Rápidos para AUMENTAR TEMPO no Cronômetro em Andamento */}
