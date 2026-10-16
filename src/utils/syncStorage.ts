@@ -181,18 +181,18 @@ export function saveRoundNumber(num: number) {
 }
 
 export function getSavedTikTokConfig(): TikTokConfig {
-  if (typeof window === 'undefined') return { username: '', autoConnect: false };
+  if (typeof window === 'undefined') return { username: 'leonardosutello', autoConnect: true };
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.TIKTOK_CONFIG);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
-        username: parsed?.username || '',
-        autoConnect: Boolean(parsed?.autoConnect),
+        username: parsed?.username || 'leonardosutello',
+        autoConnect: parsed?.autoConnect !== false,
       };
     }
   } catch (e) {}
-  return { username: '', autoConnect: false };
+  return { username: 'leonardosutello', autoConnect: true };
 }
 
 export function saveTikTokConfig(config: TikTokConfig) {

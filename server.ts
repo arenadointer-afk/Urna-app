@@ -149,7 +149,7 @@ let serverState: ServerGameState = {
       points: 1,
     },
   ],
-  tiktokUsername: '',
+  tiktokUsername: 'leonardosutello',
   botEnabled: false,
 };
 
@@ -159,6 +159,9 @@ try {
     const raw = fs.readFileSync(STATE_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
     serverState = { ...serverState, ...parsed };
+    if (!serverState.tiktokUsername) {
+      serverState.tiktokUsername = 'leonardosutello';
+    }
     console.log('[Server] Estado restaurado do disco com sucesso!');
   }
 } catch (e) {
@@ -195,7 +198,7 @@ function broadcastToClients(event: any) {
 
 // Live TikTok connection state
 let tiktokLiveConnection: any = null;
-let currentUsername = serverState.tiktokUsername || '';
+let currentUsername = serverState.tiktokUsername || 'leonardosutello';
 let connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected';
 let viewersCount = 0;
 let totalLikesCount = 0;
@@ -576,16 +579,11 @@ app.get('/api/tiktok/status', (_req: Request, res: Response) => {
   });
 });
 
-// Connect to TikTok Live
-app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
-  const { username } = req.body;
-  if (!username || typeof username !== 'string') {
-    return res.status(400).json({ error: 'Nome de usuário inválido' });
-  }
-
-  const cleanUsername = username.replace(/^@/, '').trim();
+// Reusable TikTok Live Connection Handler
+async function connectToTikTok(targetUsername: string = 'leonardosutello'): Promise<{ success: boolean; message: string }> {
+  const cleanUsername = (targetUsername || 'leonardosutello').replace(/^@/, '').trim();
   if (!cleanUsername) {
-    return res.status(400).json({ error: 'Nome de usuário vazio' });
+    return { success: false, message: 'Nome de usuário vazio' };
   }
 
   if (tiktokLiveConnection) {
@@ -601,8 +599,6 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
 
   connectionStatus = 'connecting';
   lastErrorMessage = '';
-  viewersCount = 0;
-  totalLikesCount = 0;
 
   broadcastToClients({
     type: 'status',
@@ -616,7 +612,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       throw new Error('Módulo TikTokLiveConnection não encontrado no servidor');
     }
 
-    tiktokLiveConnection = new TikTokLiveConnectionClass(cleanUsername, {
+    const conn = new TikTokLiveConnectionClass(cleanUsername, {
       processInitialData: false,
       enableExtendedGiftInfo: true,
       requestPollingIntervalMs: 1000,
@@ -626,7 +622,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       },
     });
 
-    tiktokLiveConnection.on('connected', (state: any) => {
+    conn.on('connected', (state: any) => {
       connectionStatus = 'connected';
       viewersCount = state?.roomInfo?.user_count || 0;
       lastErrorMessage = '';
@@ -640,7 +636,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       });
     });
 
-    tiktokLiveConnection.on('disconnected', () => {
+    conn.on('disconnected', () => {
       connectionStatus = 'disconnected';
       console.log(`[TikTok LIVE] Desconectado de @${cleanUsername}`);
       broadcastToClients({
@@ -650,10 +646,10 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       });
     });
 
-    tiktokLiveConnection.on('streamEnd', () => {
+    conn.on('streamEnd', () => {
       connectionStatus = 'disconnected';
-      lastErrorMessage = 'A transmissão do TikTok foi encerrada pelo streamer.';
-      console.log(`[TikTok LIVE] Live encerrada de @${cleanUsername}`);
+      lastErrorMessage = 'A transmissão do TikTok foi finalizada pelo streamer.';
+      console.log(`[TikTok LIVE] Live finalizada de @${cleanUsername}`);
       broadcastToClients({
         type: 'status',
         status: 'disconnected',
@@ -662,7 +658,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       });
     });
 
-    tiktokLiveConnection.on('error', (err: any) => {
+    conn.on('error', (err: any) => {
       const msg = err?.message || 'Erro de conexão com o TikTok';
       lastErrorMessage = msg;
       connectionStatus = 'error';
@@ -676,7 +672,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
     });
 
     // Chat comment event from TikTok
-    tiktokLiveConnection.on('chat', (data: any) => {
+    conn.on('chat', (data: any) => {
       const comment = data.comment || '';
       const user = data.uniqueId || data.nickname || '@usuario';
       addComment(comment, user);
@@ -689,7 +685,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
     });
 
     // Gift event from TikTok
-    tiktokLiveConnection.on('gift', (data: any) => {
+    conn.on('gift', (data: any) => {
       if (data.giftType === 1 && !data.repeatEnd) return;
       const repeatCount = data.repeatCount || 1;
       const diamondCount = (data.diamondCount || 1) * repeatCount;
@@ -723,7 +719,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
     });
 
     // Likes event from TikTok
-    tiktokLiveConnection.on('like', (data: any) => {
+    conn.on('like', (data: any) => {
       totalLikesCount = data.totalLikes || totalLikesCount + (data.likeCount || 1);
       broadcastToClients({
         type: 'like',
@@ -733,12 +729,13 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       });
     });
 
-    tiktokLiveConnection.on('roomUser', (data: any) => {
+    conn.on('roomUser', (data: any) => {
       if (data.viewerCount) viewersCount = data.viewerCount;
     });
 
-    await tiktokLiveConnection.connect();
-    return res.json({ success: true, message: `Conectando à live de @${cleanUsername}...` });
+    tiktokLiveConnection = conn;
+    await conn.connect();
+    return { success: true, message: `Conectado à live de @${cleanUsername}!` };
   } catch (error: any) {
     const errorText = error?.message || 'Falha ao conectar no TikTok';
     connectionStatus = 'error';
@@ -749,7 +746,19 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
       username: cleanUsername,
       lastError: errorText,
     });
-    return res.status(500).json({ error: errorText });
+    return { success: false, message: errorText };
+  }
+}
+
+// Connect to TikTok Live Endpoint
+app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
+  const { username } = req.body;
+  const targetUser = username && typeof username === 'string' && username.trim() ? username : 'leonardosutello';
+  const result = await connectToTikTok(targetUser);
+  if (result.success) {
+    return res.json(result);
+  } else {
+    return res.status(500).json({ error: result.message });
   }
 });
 
@@ -838,6 +847,19 @@ async function startServer() {
 
   app.listen(PORT, HOST, () => {
     console.log(`Urna TikTok LIVE rodando em http://${HOST}:${PORT}`);
+
+    // Conexão automática inicial ao perfil fixo @leonardosutello
+    setTimeout(() => {
+      console.log(`[TikTok LIVE] Conectando automaticamente ao perfil fixo @${currentUsername}...`);
+      connectToTikTok(currentUsername).catch(() => {});
+    }, 2000);
+
+    // Verificador contínuo: reconecta automaticamente assim que o streamer abrir a live no TikTok
+    setInterval(() => {
+      if (connectionStatus === 'disconnected' || connectionStatus === 'error') {
+        connectToTikTok(currentUsername).catch(() => {});
+      }
+    }, 25000);
   });
 }
 

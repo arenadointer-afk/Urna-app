@@ -1297,23 +1297,34 @@ tiktokLiveConnection.on('gift', data => {
                       <p className="text-xs text-slate-400">
                         {tiktokStatus.status === 'connected'
                           ? `Capturando presentes e comentários em tempo real da live de @${tiktokStatus.username || tiktokUsername}`
-                          : 'Digite o seu @ do TikTok e clique em conectar para puxar dados ao vivo sem senha.'}
+                          : 'Perfil fixo oficial definido: @leonardosutello. O sistema se conecta automaticamente assim que a live começar!'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Form de Conexão */}
+                {/* Form de Conexão com Perfil Fixo @leonardosutello */}
                 <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-slate-800">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">@</span>
-                    <input
-                      type="text"
-                      value={tiktokUsername}
-                      onChange={(e) => onChangeTikTokUsername(e.target.value.replace(/^@/, ''))}
-                      placeholder="seu_usuario_tiktok (ex: arenadointer)"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400"
-                    />
+                  <div className="relative flex-1 flex gap-1.5">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-sm">@</span>
+                      <input
+                        type="text"
+                        value={tiktokUsername}
+                        onChange={(e) => onChangeTikTokUsername(e.target.value.replace(/^@/, ''))}
+                        placeholder="leonardosutello"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                    {tiktokUsername !== 'leonardosutello' && (
+                      <button
+                        type="button"
+                        onClick={() => onChangeTikTokUsername('leonardosutello')}
+                        className="px-2.5 py-1 rounded-xl bg-indigo-900/60 hover:bg-indigo-800 border border-indigo-500/40 text-indigo-200 text-[11px] font-bold cursor-pointer whitespace-nowrap"
+                      >
+                        Restaurar @leonardosutello
+                      </button>
+                    )}
                   </div>
 
                   {tiktokStatus.status === 'connected' ? (

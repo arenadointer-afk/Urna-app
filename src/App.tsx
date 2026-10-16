@@ -86,11 +86,11 @@ export default function App() {
   const [musicTrack, setMusicTrack] = useState<MusicTrackType>('off');
   const [musicVolumeState, setMusicVolumeState] = useState(0.5);
 
-  // TikTok LIVE State
-  const [tiktokUsername, setTiktokUsername] = useState<string>('');
+  // TikTok LIVE State (Perfil Fixo Oficial: @leonardosutello)
+  const [tiktokUsername, setTiktokUsername] = useState<string>('leonardosutello');
   const [tiktokStatus, setTiktokStatus] = useState<TikTokStatus>({
     status: 'disconnected',
-    username: '',
+    username: 'leonardosutello',
     viewers: 0,
     totalLikes: 0,
     lastError: '',
