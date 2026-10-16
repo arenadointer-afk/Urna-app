@@ -1,6 +1,7 @@
-import { Candidate, BotSettings, StreamSettings, PresetDuel } from '../types';
+import { Candidate, BotSettings, StreamSettings, PresetDuel, BannerSettings } from '../types';
 import { PRESET_DUELS } from './presets';
 import { MusicTrackType } from './audio';
+import { DEFAULT_BANNER_SETTINGS } from './bannerPresets';
 
 export interface VictoryScore {
   left: number;
@@ -23,6 +24,7 @@ const STORAGE_KEYS = {
   VICTORY_SCORE: 'urna_victory_score_v2',
   BOT_SETTINGS: 'urna_bot_settings_v2',
   STREAM_SETTINGS: 'urna_stream_settings_v2',
+  BANNER_SETTINGS: 'urna_banner_settings_v2',
   TIKTOK_CONFIG: 'urna_tiktok_config_v2',
 };
 
@@ -46,6 +48,7 @@ export type SyncMessage =
   | { type: 'UPDATE_MUSIC'; track: MusicTrackType; customUrl?: string }
   | { type: 'UPDATE_BOT_SETTINGS'; botSettings: BotSettings }
   | { type: 'UPDATE_STREAM_SETTINGS'; streamSettings: StreamSettings }
+  | { type: 'UPDATE_BANNER'; bannerSettings: BannerSettings }
   | { type: 'RESET_ROUND' }
   | { type: 'TRIGGER_VOTE'; side: 'left' | 'right'; amount: number; giftName?: string; giftIcon?: string; username?: string };
 
@@ -239,5 +242,32 @@ export function saveTikTokConfig(config: TikTokConfig) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEYS.TIKTOK_CONFIG, JSON.stringify(config));
+  } catch (e) {}
+}
+
+export function getSavedBannerSettings(): BannerSettings {
+  if (typeof window === 'undefined') return DEFAULT_BANNER_SETTINGS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.BANNER_SETTINGS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.url === 'string') {
+        return {
+          enabled: parsed.enabled !== false,
+          url: parsed.url || DEFAULT_BANNER_SETTINGS.url,
+          height: parsed.height || 'normal',
+          fit: parsed.fit || 'cover',
+          position: parsed.position || 'between_candidates_and_urna',
+        };
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_BANNER_SETTINGS;
+}
+
+export function saveBannerSettings(settings: BannerSettings) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.BANNER_SETTINGS, JSON.stringify(settings));
   } catch (e) {}
 }

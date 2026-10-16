@@ -131,3 +131,12 @@ export interface StreamSettings {
   showUrnaKeyboard: boolean;
   showCommentsChat: boolean;
 }
+
+export interface BannerSettings {
+  enabled: boolean;
+  url: string;
+  height: 'compact' | 'normal' | 'tall';
+  fit: 'cover' | 'contain';
+  position?: 'above_candidates' | 'between_candidates_and_urna' | 'below_urna';
+}
+

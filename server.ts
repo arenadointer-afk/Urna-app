@@ -271,6 +271,7 @@ interface ServerGameState {
   chatMessages: any[];
   tiktokUsername: string;
   botEnabled: boolean;
+  bannerSettings?: any;
 }
 
 let serverState: ServerGameState = {
@@ -754,6 +755,22 @@ app.post('/api/music', (req: Request, res: Response) => {
   res.status(400).json({ error: 'Música inválida' });
 });
 
+// 8.3 Update Banner Settings
+app.post('/api/banner', (req: Request, res: Response) => {
+  const { bannerSettings } = req.body;
+  if (bannerSettings) {
+    serverState.bannerSettings = bannerSettings;
+    (serverState as any).updatedAt = Date.now();
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, bannerSettings: serverState.bannerSettings });
+  }
+  res.status(400).json({ error: 'Configurações de banner inválidas' });
+});
+
 // 9. Vote Trigger
 app.post('/api/vote', (req: Request, res: Response) => {
   const { side, amount, giftName, giftIcon, username, clientId } = req.body;
@@ -811,6 +828,11 @@ app.post('/api/state/restore', (req: Request, res: Response) => {
     changed = true;
   }
 
+  if (req.body.bannerSettings) {
+    serverState.bannerSettings = req.body.bannerSettings;
+    changed = true;
+  }
+
   if (changed) {
     (serverState as any).updatedAt = Date.now();
     saveStateToDisk();
@@ -821,6 +843,21 @@ app.post('/api/state/restore', (req: Request, res: Response) => {
     console.log('[Server] Estado restaurado e atualizado via cliente ativo!');
   }
   res.json({ success: true, state: serverState });
+});
+
+// 9.2.1 Update Banner Settings
+app.post('/api/banner', (req: Request, res: Response) => {
+  const { bannerSettings } = req.body;
+  if (bannerSettings && typeof bannerSettings === 'object') {
+    serverState.bannerSettings = bannerSettings;
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    return res.json({ success: true, bannerSettings: serverState.bannerSettings });
+  }
+  res.status(400).json({ error: 'Configuração de banner inválida' });
 });
 
 // 9.3 Recheck Firebase Connection and Rules Status

@@ -241,6 +241,15 @@ export async function saveGameStateToFirestore(state: any) {
     if (state.tiktokUsername !== undefined) cleanState.tiktokUsername = String(state.tiktokUsername).slice(0, 100);
     if (state.musicTrack !== undefined) cleanState.musicTrack = String(state.musicTrack);
     if (typeof state.musicVolume === 'number') cleanState.musicVolume = state.musicVolume;
+    if (state.bannerSettings && typeof state.bannerSettings === 'object') {
+      cleanState.bannerSettings = {
+        enabled: state.bannerSettings.enabled !== false,
+        url: String(state.bannerSettings.url || '').slice(0, 500000),
+        height: state.bannerSettings.height || 'normal',
+        fit: state.bannerSettings.fit || 'cover',
+        position: state.bannerSettings.position || 'between_candidates_and_urna',
+      };
+    }
 
     if (state.leftCandidate) {
       cleanState.leftCandidate = {

@@ -7,8 +7,10 @@ import {
   VictoryScore,
   TikTokStatus,
   MusicTrackType,
+  BannerSettings,
 } from '../types';
 import { PRESET_DUELS } from '../utils/presets';
+import { BANNER_PRESETS } from '../utils/bannerPresets';
 import {
   getCustomAudioInfo,
   setCustomAudioData,

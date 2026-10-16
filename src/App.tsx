@@ -7,11 +7,13 @@ import {
   PresetDuel,
   VictoryScore,
   TikTokStatus,
+  BannerSettings,
 } from './types';
 import { PRESET_DUELS } from './utils/presets';
 import { TopHeader } from './components/TopHeader';
 import { CandidateBox } from './components/CandidateBox';
 import { UrnaMachine } from './components/UrnaMachine';
+import { InteractiveBanner } from './components/InteractiveBanner';
 import { BottomLiveFeed } from './components/BottomLiveFeed';
 import { VictoryModal } from './components/VictoryModal';
 import { AdminPanel } from './components/AdminPanel';
@@ -46,6 +48,8 @@ import {
   saveRoundNumber,
   getSavedTikTokConfig,
   saveTikTokConfig,
+  getSavedBannerSettings,
+  saveBannerSettings,
   broadcastSync,
   subscribeToSync,
 } from './utils/syncStorage';
@@ -114,9 +118,12 @@ export default function App() {
   const [isLiveOnlyMode, setIsLiveOnlyMode] = useState(false);
   const [hasInteractedAudio, setHasInteractedAudio] = useState(false);
   const [adminInitialTab, setAdminInitialTab] = useState<
-    'first-live' | 'boosters' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music'
+    'first-live' | 'boosters' | 'banner' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music'
   >('boosters');
   const [soundActive, setSoundActive] = useState(true);
+
+  // Banner Interativo (Personalizável no Painel ADM)
+  const [bannerSettings, setBannerSettings] = useState<BannerSettings>(() => getSavedBannerSettings());
 
   // Background Music State (Persistente no F5)
   const [musicTrack, setMusicTrack] = useState<MusicTrackType>(() => getSavedMusicTrack());
@@ -341,6 +348,10 @@ export default function App() {
       saveSelectedMusicTrack(state.musicTrack);
       playMusicTrack(state.musicTrack);
     }
+    if (state.bannerSettings) {
+      setBannerSettings(state.bannerSettings);
+      saveBannerSettings(state.bannerSettings);
+    }
   }, []);
 
   // 1. Escuta mudanças em tempo real entre abas e janelas no mesmo navegador (BroadcastChannel - 0ms)
@@ -369,6 +380,9 @@ export default function App() {
         setMusicTrack(msg.track);
         saveSelectedMusicTrack(msg.track);
         playMusicTrack(msg.track, msg.customUrl);
+      } else if (msg.type === 'UPDATE_BANNER') {
+        setBannerSettings(msg.bannerSettings);
+        saveBannerSettings(msg.bannerSettings);
       } else if (msg.type === 'RESET_ROUND') {
         setLeftPoints(0);
         setRightPoints(0);
@@ -389,6 +403,11 @@ export default function App() {
     const interval = setInterval(() => {
       // Se o servidor estiver enviando TIME_TICK nos últimos 1800ms, o servidor lidera
       if (Date.now() - lastServerTickRef.current < 1800) {
+        return;
+      }
+
+      // Em modo Live Only (OBS / Espectador), não reseta os pontos passivamente por conta própria
+      if (isLiveOnlyMode && Date.now() - lastServerTickRef.current < 10000) {
         return;
       }
 
@@ -991,6 +1010,23 @@ export default function App() {
     }
   };
 
+  // Atualizar Banner Interativo
+  const handleUpdateBannerSettings = async (settings: BannerSettings) => {
+    setBannerSettings(settings);
+    saveBannerSettings(settings);
+    broadcastSync({ type: 'UPDATE_BANNER', bannerSettings: settings });
+    saveGameStateToFirestore({ bannerSettings: settings }).catch(() => {});
+    try {
+      await fetch('/api/banner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bannerSettings: settings }),
+      });
+    } catch (e) {
+      // offline fallback
+    }
+  };
+
   // Preset Selection: salva no Firebase Firestore e no servidor
   const handleSelectPreset = async (preset: PresetDuel) => {
     setLeftCandidate(preset.left);
@@ -1417,8 +1453,20 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. CENTER SECTION: CANDIDATE BOXES & SINGLE URNA ELETRÔNICA (TODOS NA MESMA TELA) */}
+      {/* 2. CENTER SECTION: CANDIDATE BOXES, BANNER & SINGLE URNA ELETRÔNICA (TODOS NA MESMA TELA) */}
       <main className="w-full max-w-md flex-1 flex flex-col items-center justify-center gap-1 px-1 sm:px-2 min-h-0 overflow-hidden my-auto">
+        {/* BANNER INTERATIVO: Acima dos Candidatos (se configurado) */}
+        {bannerSettings.position === 'above_candidates' && (
+          <InteractiveBanner
+            settings={bannerSettings}
+            onOpenSettings={() => {
+              setAdminInitialTab('banner');
+              setIsPasswordModalOpen(true);
+            }}
+            isLiveOnly={isLiveOnlyMode}
+          />
+        )}
+
         {/* Top: Left & Right Candidate Boxes com Pontuação Gigante e Presentes Visíveis */}
         <div className="w-full flex flex-row items-stretch justify-center gap-1.5 sm:gap-2">
           <CandidateBox
@@ -1446,6 +1494,18 @@ export default function App() {
           />
         </div>
 
+        {/* BANNER INTERATIVO: Entre os Candidatos e a Urna (Posição padrão solicitada) */}
+        {(!bannerSettings.position || bannerSettings.position === 'between_candidates_and_urna') && (
+          <InteractiveBanner
+            settings={bannerSettings}
+            onOpenSettings={() => {
+              setAdminInitialTab('banner');
+              setIsPasswordModalOpen(true);
+            }}
+            isLiveOnly={isLiveOnlyMode}
+          />
+        )}
+
         {/* Center/Bottom: UMA URNA ELETRÔNICA SÓ (100% VISÍVEL, CONFIRMA, ANIMAÇÃO E TECLAS) */}
         <UrnaMachine
           leftCandidate={leftCandidate}
@@ -1457,6 +1517,18 @@ export default function App() {
           lastVoteGiftIcon={lastVoteGiftIcon}
           lastVoteAmount={lastVoteAmount}
         />
+
+        {/* BANNER INTERATIVO: Abaixo da Urna (se configurado) */}
+        {bannerSettings.position === 'below_urna' && (
+          <InteractiveBanner
+            settings={bannerSettings}
+            onOpenSettings={() => {
+              setAdminInitialTab('banner');
+              setIsPasswordModalOpen(true);
+            }}
+            isLiveOnly={isLiveOnlyMode}
+          />
+        )}
       </main>
 
       {/* 3. BOTTOM SECTION: CLEAN LIVE CHAT & 5-COMMENT RULE PROGRESS */}
@@ -1550,6 +1622,8 @@ export default function App() {
         onDisconnectTikTok={handleDisconnectTikTok}
         onSendTestTikTokEvent={handleSendTestTikTokEvent}
         tiktokLogs={tiktokLogs}
+        bannerSettings={bannerSettings}
+        onUpdateBannerSettings={handleUpdateBannerSettings}
       />
     </div>
   );
