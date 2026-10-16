@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Candidate,
   BotSettings,
@@ -15,6 +15,11 @@ import {
   removeCustomAudio,
   initAudioContext,
 } from '../utils/audio';
+import {
+  subscribeFirebaseConnectionState,
+  testConnection,
+  FirebaseConnectionStatus,
+} from '../utils/firebase';
 import {
   Settings,
   Zap,
@@ -210,6 +215,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [testSuccessMessage, setTestSuccessMessage] = useState('');
   const [customAudioInfo, setCustomAudioInfo] = useState(() => getCustomAudioInfo());
   const [audioUploadError, setAudioUploadError] = useState('');
+  const [fbStatus, setFbStatus] = useState<FirebaseConnectionStatus>('checking');
+  const [fbErrorMsg, setFbErrorMsg] = useState('');
+  const [isTestingFb, setIsTestingFb] = useState(false);
+  const [copiedRules, setCopiedRules] = useState(false);
+
+  useEffect(() => {
+    return subscribeFirebaseConnectionState((st, err) => {
+      setFbStatus(st);
+      setFbErrorMsg(err);
+    });
+  }, []);
 
   React.useEffect(() => {
     setCustomLeftPoints(String(leftPoints));
@@ -1717,22 +1733,81 @@ tiktokLiveConnection.on('gift', data => {
                   </div>
                 </div>
 
-                {/* Status do Firebase Firestore */}
-                <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
-                    <div>
-                      <span className="font-black text-emerald-400 uppercase tracking-wide block text-[11px]">
-                        ☁️ Firebase Firestore em Nuvem Ativo
-                      </span>
-                      <span className="text-[10px] text-emerald-200/80">
-                        Fotos, nomes, tempo, rodadas e presentes sincronizados em tempo real entre todos os aparelhos e links públicos (sem login).
-                      </span>
+                {/* Status e Diagnóstico do Firebase Firestore */}
+                <div className={`p-3.5 rounded-2xl border text-xs space-y-2.5 transition-all ${
+                  fbStatus === 'connected'
+                    ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-200'
+                    : fbStatus === 'permission_denied'
+                    ? 'bg-amber-950/50 border-amber-500/60 text-amber-200'
+                    : 'bg-slate-900/80 border-slate-700 text-slate-300'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-3 h-3 rounded-full shrink-0 ${
+                        fbStatus === 'connected'
+                          ? 'bg-emerald-400 animate-pulse'
+                          : fbStatus === 'permission_denied'
+                          ? 'bg-amber-400'
+                          : 'bg-slate-400 animate-ping'
+                      }`} />
+                      <div>
+                        <span className="font-black text-white uppercase tracking-wide block text-[11px]">
+                          ☁️ Firebase Firestore em Nuvem ({fbStatus === 'connected' ? '100% Conectado' : fbStatus === 'permission_denied' ? 'Regras Bloqueadas no Console' : 'Verificando...'})
+                        </span>
+                        <span className="text-[10px] text-slate-300">
+                          {fbStatus === 'connected'
+                            ? 'Sincronização em tempo real ativa para placar, votos e candidatos.'
+                            : fbStatus === 'permission_denied'
+                            ? 'O banco "appurna" existe, mas as Regras de Segurança no Console estão bloqueando leitura/gravação.'
+                            : 'Checando conectividade com o banco do Firebase...'}
+                        </span>
+                      </div>
                     </div>
+
+                    <button
+                      type="button"
+                      disabled={isTestingFb}
+                      onClick={async () => {
+                        setIsTestingFb(true);
+                        try {
+                          await testConnection();
+                        } finally {
+                          setTimeout(() => setIsTestingFb(false), 800);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[10px] border border-slate-600 cursor-pointer active:scale-95 transition-all shrink-0"
+                    >
+                      {isTestingFb ? 'Testando...' : '🔄 Testar Agora'}
+                    </button>
                   </div>
-                  <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-900 text-emerald-200 font-bold border border-emerald-700 shrink-0">
-                    Sincronizado
-                  </span>
+
+                  {fbStatus === 'permission_denied' && (
+                    <div className="p-3 rounded-xl bg-black/60 border border-amber-500/40 space-y-2 text-[11px] text-amber-100">
+                      <div className="font-bold text-amber-300 flex items-center justify-between">
+                        <span>👉 Como Liberar o Firebase em 10 Segundos (Fácil):</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+                            navigator.clipboard.writeText(rules);
+                            setCopiedRules(true);
+                            setTimeout(() => setCopiedRules(false), 2500);
+                          }}
+                          className="px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-[10px] cursor-pointer"
+                        >
+                          {copiedRules ? '✓ Regras Copiadas!' : '📋 Copiar Regras'}
+                        </button>
+                      </div>
+                      <ol className="list-decimal pl-4 space-y-1 text-slate-300">
+                        <li>Acesse o <strong className="text-white">console.firebase.google.com</strong> e abra seu projeto <strong className="text-amber-300">appurna</strong>.</li>
+                        <li>No menu lateral, clique em <strong className="text-white">Firestore Database</strong> e depois na aba <strong className="text-white">Regras (Rules)</strong>.</li>
+                        <li>Substitua o conteúdo por <code className="text-emerald-300 bg-zinc-900 px-1 py-0.5 rounded">allow read, write: if true;</code> e clique no botão azul <strong className="text-white">Publicar</strong>.</li>
+                      </ol>
+                      <p className="text-[10px] text-slate-400 pt-1 border-t border-slate-800">
+                        🔑 <strong>Sobre o print da Chave Privada (Service Account):</strong> No Render, você também pode adicionar o arquivo de chave privada baixado como <code className="text-slate-300">serviceAccountKey.json</code> ou colocar seu JSON na variável de ambiente <code className="text-slate-300">FIREBASE_SERVICE_ACCOUNT</code> para privilégios de Admin no backend. Mas liberar as regras no Console do Firebase (passos acima) já resolve tanto para o celular/OBS quanto para o servidor de uma só vez!
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Form de Conexão com Perfil Fixo @leonardosutello */}

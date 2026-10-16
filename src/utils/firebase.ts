@@ -50,12 +50,21 @@ export interface FirestoreErrorInfo {
   };
 }
 
-// Circuit breaker for Firestore free tier write quota
-let isFirestoreQuotaExceeded =
-  typeof window !== 'undefined' &&
-  (localStorage.getItem('firestore_quota_exceeded') === 'true' ||
-    sessionStorage.getItem('firestore_quota_exceeded') === 'true');
+// Circuit breaker for Firestore free tier write quota with auto-expiry
+let isFirestoreQuotaExceeded = false;
 let quotaWarningLogged = false;
+
+if (typeof window !== 'undefined') {
+  try {
+    const quotaTimestamp = localStorage.getItem('firestore_quota_time');
+    if (quotaTimestamp && Date.now() - parseInt(quotaTimestamp, 10) < 15 * 60 * 1000) {
+      isFirestoreQuotaExceeded = true;
+    } else {
+      localStorage.removeItem('firestore_quota_exceeded');
+      localStorage.removeItem('firestore_quota_time');
+    }
+  } catch (_) {}
+}
 
 export type FirebaseConnectionStatus = 'checking' | 'connected' | 'permission_denied' | 'error';
 let currentFirebaseStatus: FirebaseConnectionStatus = 'checking';
@@ -98,7 +107,7 @@ export function checkQuotaError(error: unknown): boolean {
       if (typeof window !== 'undefined') {
         try {
           localStorage.setItem('firestore_quota_exceeded', 'true');
-          sessionStorage.setItem('firestore_quota_exceeded', 'true');
+          localStorage.setItem('firestore_quota_time', String(Date.now()));
         } catch (_) {}
       }
       if (!quotaWarningLogged) {

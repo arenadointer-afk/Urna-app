@@ -257,6 +257,32 @@ export default function App() {
       setIsPaused(state.isPaused);
       saveIsPaused(state.isPaused);
     }
+    // Proteção contra sobrescrita acidental por servidor reiniciado ou vazio:
+    // Se o servidor acabou de acordar (pontos 0) e NÃO for um reset manual do streamer,
+    // mas o cliente local já possui pontos ou placar ativos de uma live em andamento:
+    const localPts = getSavedPoints();
+    const localScore = getSavedVictoryScore();
+    const hasLocalActivePoints = localPts.leftPoints > 0 || localPts.rightPoints > 0;
+    const hasLocalActiveScore = localScore.left > 0 || localScore.right > 0;
+    const incomingIsZero = (state.leftPoints === 0 && state.rightPoints === 0);
+
+    if (!options?.isAuthoritativeReset && incomingIsZero && (hasLocalActivePoints || hasLocalActiveScore)) {
+      console.log('[Sync] Servidor reiniciou limpo. Mantendo e sincronizando estado ativo local com o servidor.');
+      fetch('/api/state/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leftPoints: localPts.leftPoints,
+          rightPoints: localPts.rightPoints,
+          victoryScore: localScore,
+          roundNumber: getSavedRoundNumber(1),
+          leftCandidate: getSavedCandidate('left'),
+          rightCandidate: getSavedCandidate('right'),
+        }),
+      }).catch(() => {});
+      return;
+    }
+
     if (typeof state.leftPoints === 'number') {
       const val = state.leftPoints;
       pointsRef.current.left = val;
@@ -277,9 +303,22 @@ export default function App() {
       pointsRef.current.rightGifts = val;
       setRightGiftsCount(val);
     }
+
+    // Persiste imediatamente no localStorage para não perder em F5
+    if (typeof state.leftPoints === 'number' || typeof state.rightPoints === 'number') {
+      savePoints({
+        leftPoints: pointsRef.current.left,
+        rightPoints: pointsRef.current.right,
+        leftGifts: pointsRef.current.leftGifts,
+        rightGifts: pointsRef.current.rightGifts,
+      });
+    }
+
     if (state.victoryScore) {
-      setVictoryScore(state.victoryScore);
-      saveVictoryScore(state.victoryScore);
+      if (options?.isAuthoritativeReset || state.victoryScore.left > 0 || state.victoryScore.right > 0 || (!localScore.left && !localScore.right)) {
+        setVictoryScore(state.victoryScore);
+        saveVictoryScore(state.victoryScore);
+      }
     }
     if (state.lastLeftUser) setLastLeftUser(state.lastLeftUser);
     if (state.lastLeftText) setLastLeftText(state.lastLeftText);

@@ -7,6 +7,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+import { initializeApp as initAdminApp, getApps as getAdminApps, cert } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
 import { TikTokLiveConnection } from 'tiktok-live-connector';
 
@@ -25,6 +27,7 @@ const STATE_FILE = path.resolve(__dirname, 'server_state.json');
 
 // Initialize Firebase Firestore for Cloud Persistence across devices
 let firestoreDb: any = null;
+let isFirestoreAdmin = false;
 let isFirestoreQuotaExceeded = false;
 
 function isQuotaError(err: any): boolean {
@@ -37,22 +40,127 @@ function isQuotaError(err: any): boolean {
   );
 }
 
+// 1. Prioridade A: Tenta conectar via Firebase Admin SDK (Chave Privada / Service Account JSON)
+// Garante 100% de permissões totais no backend sem depender de regras de segurança públicas
 try {
-  const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    if (process.env.FIREBASE_API_KEY) {
-      rawConfig.apiKey = process.env.FIREBASE_API_KEY;
+  let saJson: any = null;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    try {
+      saJson = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    } catch {
+      saJson = JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, 'base64').toString('utf-8'));
     }
-    const fbApp = !getApps().length ? initializeApp(rawConfig) : getApps()[0];
-    firestoreDb =
-      rawConfig.firestoreDatabaseId && rawConfig.firestoreDatabaseId !== '(default)'
-        ? getFirestore(fbApp, rawConfig.firestoreDatabaseId)
-        : getFirestore(fbApp);
-    console.log('[Server] Firebase Firestore conectado com sucesso!');
+  } else if (fs.existsSync(path.resolve(__dirname, 'serviceAccountKey.json'))) {
+    saJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'serviceAccountKey.json'), 'utf-8'));
+  } else if (fs.existsSync(path.resolve(__dirname, 'firebase-service-account.json'))) {
+    saJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'firebase-service-account.json'), 'utf-8'));
+  }
+
+  if (saJson) {
+    const adminApp = !getAdminApps().length
+      ? initAdminApp({
+          credential: cert(saJson),
+          projectId: saJson.project_id || 'appurna',
+        })
+      : getAdminApps()[0];
+    firestoreDb = getAdminFirestore(adminApp);
+    isFirestoreAdmin = true;
+    console.log('[Server] Firebase Firestore conectado via Firebase Admin SDK (Privilégios Totais)!');
   }
 } catch (e) {
-  console.warn('[Server] Falha ao inicializar Firebase Firestore:', e);
+  console.warn('[Server] Falha ao inicializar Firebase Admin SDK:', e);
+}
+
+// 2. Prioridade B: Conecta via Firebase Client Web SDK (usando firebase-applet-config.json)
+if (!firestoreDb) {
+  try {
+    const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (process.env.FIREBASE_API_KEY) {
+        rawConfig.apiKey = process.env.FIREBASE_API_KEY;
+      }
+      const fbApp = !getApps().length ? initializeApp(rawConfig) : getApps()[0];
+      firestoreDb =
+        rawConfig.firestoreDatabaseId && rawConfig.firestoreDatabaseId !== '(default)'
+          ? getFirestore(fbApp, rawConfig.firestoreDatabaseId)
+          : getFirestore(fbApp);
+      console.log('[Server] Firebase Firestore conectado via Web SDK!');
+    }
+  } catch (e) {
+    console.warn('[Server] Falha ao inicializar Firebase Firestore Web SDK:', e);
+  }
+}
+
+// Funções utilitárias unificadas para persistência na nuvem
+async function fetchCloudGameState(): Promise<any> {
+  if (!firestoreDb) return null;
+  try {
+    if (isFirestoreAdmin) {
+      const snap = await firestoreDb.collection('game_state').doc('current').get();
+      return snap.exists ? snap.data() : null;
+    } else {
+      const docRef = doc(firestoreDb, 'game_state', 'current');
+      const snap = await getDoc(docRef);
+      return snap.exists() ? snap.data() : null;
+    }
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    if (msg.includes('permission-denied') || msg.includes('Missing or insufficient permissions')) {
+      console.warn('[Server] Firestore: Permissão negada. As regras do Firestore no Console do Firebase precisam de "allow read, write: if true;".');
+    } else {
+      console.warn('[Server] Falha ao consultar game_state do Firestore:', msg);
+    }
+    return null;
+  }
+}
+
+async function writeCloudGameState(state: any) {
+  if (!firestoreDb || isFirestoreQuotaExceeded) return;
+  try {
+    const clean = { ...state, updatedAt: Date.now() };
+    if (isFirestoreAdmin) {
+      await firestoreDb.collection('game_state').doc('current').set(clean, { merge: true });
+    } else {
+      const docRef = doc(firestoreDb, 'game_state', 'current');
+      await setDoc(docRef, clean, { merge: true });
+    }
+  } catch (err: any) {
+    if (isQuotaError(err)) {
+      isFirestoreQuotaExceeded = true;
+      console.warn('[Server] Quota de gravação do Firestore excedida.');
+    } else {
+      console.warn('[Server] Falha ao gravar game_state no Firestore:', err?.message || err);
+    }
+  }
+}
+
+async function writeCloudLiveEvent(event: any) {
+  if (!firestoreDb || isFirestoreQuotaExceeded) return;
+  try {
+    if (isFirestoreAdmin) {
+      await firestoreDb.collection('live_events').doc(event.id).set(event);
+    } else {
+      const docRef = doc(firestoreDb, 'live_events', event.id);
+      await setDoc(docRef, event);
+    }
+  } catch (err: any) {
+    if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+  }
+}
+
+async function writeCloudChatMessage(msg: any) {
+  if (!firestoreDb || isFirestoreQuotaExceeded) return;
+  try {
+    if (isFirestoreAdmin) {
+      await firestoreDb.collection('chat_messages').doc(msg.id).set(msg);
+    } else {
+      const docRef = doc(firestoreDb, 'chat_messages', msg.id);
+      await setDoc(docRef, msg);
+    }
+  } catch (err: any) {
+    if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
+  }
 }
 
 const app = express();
@@ -193,19 +301,7 @@ function saveStateToDisk() {
       console.error('[Server] Erro ao salvar estado no disco:', e);
     }
 
-    if (firestoreDb && !isFirestoreQuotaExceeded) {
-      try {
-        const docRef = doc(firestoreDb, 'game_state', 'current');
-        setDoc(docRef, { ...serverState, updatedAt: Date.now() }, { merge: true }).catch((err) => {
-          if (isQuotaError(err)) {
-            isFirestoreQuotaExceeded = true;
-            console.warn('[Server] Firestore quota de gravação excedida. Operando com armazenamento local e SSE (100% estável).');
-          } else {
-            console.warn('[Server] Falha ao atualizar Firestore:', err?.message || err);
-          }
-        });
-      } catch (e) {}
-    }
+    writeCloudGameState(serverState);
   }, 400);
 }
 
@@ -278,30 +374,21 @@ function addVote(
   saveStateToDisk();
 
   // Apenas grava no Firestore se o evento não tiver vindo de um cliente que já o gravou
-  if (firestoreDb && !clientId && !isFirestoreQuotaExceeded) {
-    try {
-      const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const evtRef = doc(firestoreDb, 'live_events', id);
-      setDoc(evtRef, {
-        id,
-        type: isGift ? 'gift' : 'vote',
-        side,
-        amount,
-        giftName: giftName || '',
-        giftIcon: newMsg.giftIcon || '🎁',
-        username: user,
-        isEpic: amount >= 10,
-        clientId: '',
-        timestamp: Date.now(),
-      }).catch((err) => {
-        if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
-      });
-
-      const msgRef = doc(firestoreDb, 'chat_messages', newMsg.id);
-      setDoc(msgRef, newMsg).catch((err) => {
-        if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
-      });
-    } catch (e) {}
+  if (!clientId) {
+    const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    writeCloudLiveEvent({
+      id,
+      type: isGift ? 'gift' : 'vote',
+      side,
+      amount,
+      giftName: giftName || '',
+      giftIcon: newMsg.giftIcon || '🎁',
+      username: user,
+      isEpic: amount >= 10,
+      clientId: '',
+      timestamp: Date.now(),
+    });
+    writeCloudChatMessage(newMsg);
   }
 
   broadcastToClients({
@@ -375,21 +462,14 @@ function addComment(text: string, username?: string) {
 
   saveStateToDisk();
 
-  if (firestoreDb && !isFirestoreQuotaExceeded) {
-    try {
-      const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-      const evtRef = doc(firestoreDb, 'live_events', id);
-      setDoc(evtRef, {
-        id,
-        type: 'chat',
-        comment: trimmed,
-        username: author,
-        timestamp: Date.now(),
-      }).catch((err) => {
-        if (isQuotaError(err)) isFirestoreQuotaExceeded = true;
-      });
-    } catch (e) {}
-  }
+  const evtId = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  writeCloudLiveEvent({
+    id: evtId,
+    type: 'chat',
+    comment: trimmed,
+    username: author,
+    timestamp: Date.now(),
+  });
 
   broadcastToClients({
     type: 'CHAT_TRIGGER',
@@ -400,6 +480,11 @@ function addComment(text: string, username?: string) {
 // Server clock tick loop (Synchronized timer across all viewers and OBS)
 setInterval(() => {
   if (serverState.isPaused) return;
+
+  // Se não há clientes conectados (SSE) e os pontos estão zerados, não roda o relógio em falso
+  if (sseClients.length === 0 && serverState.leftPoints === 0 && serverState.rightPoints === 0) {
+    return;
+  }
 
   if (!serverState.isRoundOver) {
     if (serverState.timeLeft > 1) {
@@ -670,6 +755,49 @@ const handlePointsUpdate = (req: Request, res: Response) => {
 };
 app.post('/api/points', handlePointsUpdate);
 app.post('/api/state/points', handlePointsUpdate);
+
+// 9.2 Restore state from active client when server wakes up or restarts
+app.post('/api/state/restore', (req: Request, res: Response) => {
+  const { leftPoints, rightPoints, victoryScore, roundNumber, leftCandidate, rightCandidate } = req.body;
+  let changed = false;
+  if (typeof leftPoints === 'number' && leftPoints > serverState.leftPoints) {
+    serverState.leftPoints = leftPoints;
+    changed = true;
+  }
+  if (typeof rightPoints === 'number' && rightPoints > serverState.rightPoints) {
+    serverState.rightPoints = rightPoints;
+    changed = true;
+  }
+  if (victoryScore && typeof victoryScore.left === 'number' && typeof victoryScore.right === 'number') {
+    if (victoryScore.left > serverState.victoryScore.left || victoryScore.right > serverState.victoryScore.right) {
+      serverState.victoryScore = victoryScore;
+      changed = true;
+    }
+  }
+  if (typeof roundNumber === 'number' && roundNumber > serverState.roundNumber) {
+    serverState.roundNumber = roundNumber;
+    changed = true;
+  }
+  if (leftCandidate && leftCandidate.name && (!serverState.leftCandidate?.name || serverState.leftCandidate.name === 'LUIZ INÁCIO LULA')) {
+    serverState.leftCandidate = leftCandidate;
+    changed = true;
+  }
+  if (rightCandidate && rightCandidate.name && (!serverState.rightCandidate?.name || serverState.rightCandidate.name === 'FLÁVIO BOLSONARO')) {
+    serverState.rightCandidate = rightCandidate;
+    changed = true;
+  }
+
+  if (changed) {
+    (serverState as any).updatedAt = Date.now();
+    saveStateToDisk();
+    broadcastToClients({
+      type: 'STATE_SYNC',
+      state: serverState,
+    });
+    console.log('[Server] Estado restaurado e atualizado via cliente ativo!');
+  }
+  res.json({ success: true, state: serverState });
+});
 
 // 10. Chat Trigger
 app.post('/api/chat', (req: Request, res: Response) => {
@@ -1031,24 +1159,16 @@ async function startServer() {
     console.log(`Urna TikTok LIVE rodando em http://${HOST}:${PORT}`);
 
     // Carrega estado mais recente gravado no Firebase Firestore em segundo plano (sem bloquear abertura imediata da porta 3000)
-    if (firestoreDb) {
-      try {
-        const docRef = doc(firestoreDb, 'game_state', 'current');
-        getDoc(docRef)
-          .then((snap) => {
-            if (snap.exists()) {
-              const cloudData = snap.data();
-              serverState = { ...serverState, ...cloudData };
-              console.log('[Server] Estado restaurado do Firebase Firestore com sucesso!');
-            }
-          })
-          .catch((e) => {
-            console.warn('[Server] Falha ao carregar estado do Firestore na inicialização:', e?.message || e);
-          });
-      } catch (e) {
-        console.warn('[Server] Falha síncrona ao consultar Firestore:', e);
-      }
-    }
+    fetchCloudGameState()
+      .then((cloudData) => {
+        if (cloudData) {
+          serverState = { ...serverState, ...cloudData };
+          console.log('[Server] Estado restaurado do Firebase Firestore com sucesso! Placar:', serverState.victoryScore);
+        }
+      })
+      .catch((e) => {
+        console.warn('[Server] Falha ao carregar estado do Firestore na inicialização:', e?.message || e);
+      });
 
     // Conexão inicial com delay seguro para estabilização do container
     setTimeout(() => {
