@@ -1,12 +1,10 @@
 {
-  "projectId": "gen-lang-client-0987379661",
-  "appId": "1:179531973215:web:ec2a213a94c637ffb111ea",
+  "projectId": "appurna",
+  "appId": "1:96929821279:web:6fefdd67dc0ae959c321ea",
   "apiKey": "AIzaSyAqBnkBIfJ8eyId_-7ZGAWgonNivma1cqY",
-  "authDomain": "gen-lang-client-0987379661.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-urnaapp-79ce2409-6f06-40e7-a0d7-1731167be717",
-  "storageBucket": "gen-lang-client-0987379661.firebasestorage.app",
-  "messagingSenderId": "179531973215",
-  "measurementId": "",
-  "oAuthClientId": "179531973215-1mmdc9i93v4hq62vuj6cilrrbmmal0b6.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "authDomain": "appurna.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "appurna.firebasestorage.app",
+  "messagingSenderId": "96929821279",
+  "measurementId": "G-0PXKYXSEWJ"
 }

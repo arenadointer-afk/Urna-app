@@ -18,8 +18,10 @@ try {
   process.exit(1);
 }
 
-const fbApp = !getApps().length ? initializeApp(config) : getApps()[0];
-const db = getFirestore(fbApp, config.firestoreDatabaseId);
+const db =
+  config.firestoreDatabaseId && config.firestoreDatabaseId !== '(default)'
+    ? getFirestore(fbApp, config.firestoreDatabaseId)
+    : getFirestore(fbApp);
 
 // 2. Define o usuário do TikTok (pode passar por argumento: node tiktok-bridge.js seu_usuario)
 const targetUser = (process.argv[2] || 'leonardosutello').replace(/^@/, '').trim();

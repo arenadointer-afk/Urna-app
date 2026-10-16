@@ -45,7 +45,10 @@ try {
       rawConfig.apiKey = process.env.FIREBASE_API_KEY;
     }
     const fbApp = !getApps().length ? initializeApp(rawConfig) : getApps()[0];
-    firestoreDb = getFirestore(fbApp, rawConfig.firestoreDatabaseId);
+    firestoreDb =
+      rawConfig.firestoreDatabaseId && rawConfig.firestoreDatabaseId !== '(default)'
+        ? getFirestore(fbApp, rawConfig.firestoreDatabaseId)
+        : getFirestore(fbApp);
     console.log('[Server] Firebase Firestore conectado com sucesso!');
   }
 } catch (e) {

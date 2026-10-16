@@ -17,8 +17,10 @@ import firebaseConfig from '../../firebase-applet-config.json';
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// CRITICAL: The app will break without specifying firestoreDatabaseId
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db =
+  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
 export const auth = getAuth(app);
 
 // Error Handling per Firebase Integration Skill specification
@@ -54,6 +56,33 @@ let isFirestoreQuotaExceeded =
   (localStorage.getItem('firestore_quota_exceeded') === 'true' ||
     sessionStorage.getItem('firestore_quota_exceeded') === 'true');
 let quotaWarningLogged = false;
+
+export type FirebaseConnectionStatus = 'checking' | 'connected' | 'permission_denied' | 'error';
+let currentFirebaseStatus: FirebaseConnectionStatus = 'checking';
+let currentFirebaseErrorMsg = '';
+const statusListeners = new Set<(status: FirebaseConnectionStatus, errorMsg: string) => void>();
+
+function notifyStatus(status: FirebaseConnectionStatus, errorMsg = '') {
+  currentFirebaseStatus = status;
+  currentFirebaseErrorMsg = errorMsg;
+  statusListeners.forEach((fn) => {
+    try {
+      fn(status, errorMsg);
+    } catch (_) {}
+  });
+}
+
+export function getFirebaseConnectionState(): { status: FirebaseConnectionStatus; error: string } {
+  return { status: currentFirebaseStatus, error: currentFirebaseErrorMsg };
+}
+
+export function subscribeFirebaseConnectionState(fn: (status: FirebaseConnectionStatus, errorMsg: string) => void) {
+  statusListeners.add(fn);
+  fn(currentFirebaseStatus, currentFirebaseErrorMsg);
+  return () => {
+    statusListeners.delete(fn);
+  };
+}
 
 export function checkQuotaError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
@@ -98,8 +127,21 @@ export function handleFirestoreError(
     };
   }
 
+  const errorString = error instanceof Error ? error.message : String(error);
+  if (
+    errorString.includes('permission-denied') ||
+    errorString.includes('Missing or insufficient permissions')
+  ) {
+    notifyStatus(
+      'permission_denied',
+      'Regras do Firestore bloqueadas no Console do Firebase (Missing or insufficient permissions).'
+    );
+  } else if (!errorString.includes('offline')) {
+    notifyStatus('error', errorString);
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorString,
     authInfo: {
       userId: auth.currentUser?.uid || null,
       email: auth.currentUser?.email || null,
@@ -120,14 +162,26 @@ export function handleFirestoreError(
 }
 
 // Initial Connection Test as required by Skill
-async function testConnection() {
+export async function testConnection() {
   if (isFirestoreQuotaExceeded) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
+    notifyStatus('connected');
+  } catch (error: any) {
     if (checkQuotaError(error)) return;
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (
+      msg.includes('permission-denied') ||
+      msg.includes('Missing or insufficient permissions')
+    ) {
+      notifyStatus(
+        'permission_denied',
+        'Regras do Firestore bloqueadas no Console do Firebase (Missing or insufficient permissions).'
+      );
+    } else if (msg.includes('the client is offline')) {
       console.warn('[Firebase] Verifique a conexão com o Firebase Firestore.');
+    } else {
+      notifyStatus('connected'); // getDocFromServer on non-existent doc throws or succeeds
     }
   }
 }
