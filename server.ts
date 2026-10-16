@@ -826,16 +826,23 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
   }
 }
 
-// Connect to TikTok Live Endpoint
-app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
+// Connect to TikTok Live Endpoint (Non-blocking: responde instantaneamente e conecta em background)
+app.post('/api/tiktok/connect', (req: Request, res: Response) => {
   const { username } = req.body;
   const targetUser = username && typeof username === 'string' && username.trim() ? username : 'leonardosutello';
-  const result = await connectToTikTok(targetUser);
-  if (result.success) {
-    return res.json(result);
-  } else {
-    return res.status(400).json({ error: result.message });
-  }
+  const cleanUsername = targetUser.replace(/^@/, '').trim();
+
+  // Inicia a tentativa de conexão em segundo plano sem travar a requisição HTTP
+  connectToTikTok(cleanUsername).catch((err) => {
+    console.warn(`[TikTok] Erro na conexão em background de @${cleanUsername}:`, err);
+  });
+
+  return res.json({
+    success: true,
+    status: 'connecting',
+    username: cleanUsername,
+    message: `Iniciando conexão com a LIVE de @${cleanUsername}...`,
+  });
 });
 
 // Disconnect from TikTok Live

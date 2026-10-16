@@ -17,6 +17,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { PasswordModal } from './components/PasswordModal';
 import { FloatingReactions, FloatingItem } from './components/FloatingReactions';
 import { EpicGiftAlert, EpicGiftData } from './components/EpicGiftAlert';
+import { LivePointNotification, PointNotificationItem } from './components/LivePointNotification';
 import { ShareLinksModal } from './components/ShareLinksModal';
 import {
   setSoundEnabled,
@@ -95,6 +96,20 @@ export default function App() {
   const [lastRightVoteTimestamp, setLastRightVoteTimestamp] = useState<number>(0);
   const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
   const [epicGift, setEpicGift] = useState<EpicGiftData | null>(null);
+  const [pointNotifications, setPointNotifications] = useState<PointNotificationItem[]>([]);
+
+  const addPointNotification = useCallback((item: Omit<PointNotificationItem, 'id' | 'timestamp'>) => {
+    const id = `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const fullItem: PointNotificationItem = {
+      ...item,
+      id,
+      timestamp: Date.now(),
+    };
+    setPointNotifications((prev) => [fullItem, ...prev.slice(0, 3)]);
+    setTimeout(() => {
+      setPointNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 3800);
+  }, []);
 
   // Live Chat Messages
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -447,6 +462,16 @@ export default function App() {
             } else {
               setLastRightVoteTimestamp(Date.now());
             }
+            // Dispara notificação visual na tela para qualquer voto/presente
+            addPointNotification({
+              username: data.username || '@fa_live',
+              giftName: data.giftName || (data.side === 'left' ? data.state.leftCandidate.primaryGift.name : data.state.rightCandidate.primaryGift.name),
+              giftIcon: data.giftIcon || (data.side === 'left' ? data.state.leftCandidate.primaryGift.icon : data.state.rightCandidate.primaryGift.icon),
+              amount: data.amount || 1,
+              side: data.side,
+              candidateNumber: data.side === 'left' ? data.state.leftCandidate.number : data.state.rightCandidate.number,
+              candidateName: data.side === 'left' ? data.state.leftCandidate.name : data.state.rightCandidate.name,
+            });
             if (data.isEpic) {
               setEpicGift({
                 id: Date.now(),
@@ -611,6 +636,16 @@ export default function App() {
       playVoteSound();
       const icon = giftIcon || (side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon);
       spawnReaction(icon, side);
+
+      addPointNotification({
+        username: user,
+        giftName: giftName || (side === 'left' ? leftCandidate.primaryGift.name : rightCandidate.primaryGift.name),
+        giftIcon: icon,
+        amount,
+        side,
+        candidateNumber: side === 'left' ? leftCandidate.number : rightCandidate.number,
+        candidateName: side === 'left' ? leftCandidate.name : rightCandidate.name,
+      });
 
       if (amount >= 10) {
         setEpicGift({
@@ -960,23 +995,37 @@ export default function App() {
     const clean = targetUser.replace(/^@/, '').trim();
     if (!clean) return;
     setTiktokUsername(clean);
+    setTiktokStatus((prev) => ({
+      ...prev,
+      status: 'connecting',
+      username: clean,
+      lastError: '',
+    }));
     try {
       const res = await fetch('/api/tiktok/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: clean }),
       });
-      const data = await res.json();
+
+      let data: any = {};
+      try {
+        const text = await res.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (parseErr) {
+        data = {};
+      }
+
       if (!res.ok) {
         setTiktokStatus((prev) => ({
           ...prev,
           status: 'error',
-          lastError: data.error || 'Erro ao conectar ao TikTok',
+          lastError: data.error || `Erro na resposta do servidor (${res.status})`,
         }));
       } else {
         setTiktokStatus((prev) => ({
           ...prev,
-          status: 'connected',
+          status: data.status || 'connecting',
           username: clean,
           lastError: '',
         }));
@@ -1026,6 +1075,12 @@ export default function App() {
 
       {/* Epic Mega Gift Celebration Banner */}
       <EpicGiftAlert gift={epicGift} onDismiss={() => setEpicGift(null)} />
+
+      {/* Live Point Toast Notifications on Live Screen */}
+      <LivePointNotification
+        notifications={pointNotifications}
+        onDismiss={(id) => setPointNotifications((prev) => prev.filter((n) => n.id !== id))}
+      />
 
       {/* Unobtrusive Audio Activator Banner if Browser requires tap */}
       {!hasInteractedAudio && isLiveOnlyMode && (
