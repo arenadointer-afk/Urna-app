@@ -201,6 +201,7 @@ export async function pushLiveEventToFirestore(event: {
   username?: string;
   comment?: string;
   isEpic?: boolean;
+  clientId?: string;
 }) {
   try {
     const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -215,6 +216,7 @@ export async function pushLiveEventToFirestore(event: {
       username: (event.username || '@fa_live').slice(0, 100),
       comment: (event.comment || '').slice(0, 300),
       isEpic: Boolean(event.isEpic),
+      clientId: (event.clientId || '').slice(0, 64),
       timestamp: Date.now(),
     });
   } catch (error) {

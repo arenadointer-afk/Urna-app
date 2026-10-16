@@ -65,6 +65,7 @@
         "username": { "type": "string", "maxLength": 100 },
         "comment": { "type": "string", "maxLength": 300 },
         "isEpic": { "type": "boolean" },
+        "clientId": { "type": "string", "maxLength": 64 },
         "timestamp": { "type": "number" }
       },
       "required": ["id", "type", "timestamp"]

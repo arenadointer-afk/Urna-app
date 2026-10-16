@@ -39,6 +39,7 @@ service cloud.firestore {
         data.keys().hasAll(['id', 'type', 'timestamp']) &&
         data.id is string && data.id.size() <= 64 &&
         data.type is string && data.type.size() <= 32 &&
+        (!('clientId' in data) || (data.clientId is string && data.clientId.size() <= 64)) &&
         data.timestamp is number;
     }
 

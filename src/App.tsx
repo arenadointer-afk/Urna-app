@@ -124,6 +124,12 @@ export default function App() {
     rightGifts: getSavedPoints().rightGifts,
   });
 
+  // Client ID único para desduplicação de eventos em tempo real
+  const clientIdRef = useRef<string>(
+    'c_' + Math.random().toString(36).substring(2, 9) + Date.now()
+  );
+  const clientId = clientIdRef.current;
+
   // Keep ref synchronized
   useEffect(() => {
     pointsRef.current = {
@@ -240,32 +246,24 @@ export default function App() {
       saveIsPaused(state.isPaused);
     }
     if (typeof state.leftPoints === 'number') {
-      setLeftPoints((prev) => {
-        const val = options?.isAuthoritativeReset ? state.leftPoints : Math.max(prev, state.leftPoints);
-        pointsRef.current.left = val;
-        return val;
-      });
+      const val = state.leftPoints;
+      pointsRef.current.left = val;
+      setLeftPoints(val);
     }
     if (typeof state.rightPoints === 'number') {
-      setRightPoints((prev) => {
-        const val = options?.isAuthoritativeReset ? state.rightPoints : Math.max(prev, state.rightPoints);
-        pointsRef.current.right = val;
-        return val;
-      });
+      const val = state.rightPoints;
+      pointsRef.current.right = val;
+      setRightPoints(val);
     }
     if (typeof state.leftGiftsCount === 'number') {
-      setLeftGiftsCount((prev) => {
-        const val = options?.isAuthoritativeReset ? state.leftGiftsCount : Math.max(prev, state.leftGiftsCount);
-        pointsRef.current.leftGifts = val;
-        return val;
-      });
+      const val = state.leftGiftsCount;
+      pointsRef.current.leftGifts = val;
+      setLeftGiftsCount(val);
     }
     if (typeof state.rightGiftsCount === 'number') {
-      setRightGiftsCount((prev) => {
-        const val = options?.isAuthoritativeReset ? state.rightGiftsCount : Math.max(prev, state.rightGiftsCount);
-        pointsRef.current.rightGifts = val;
-        return val;
-      });
+      const val = state.rightGiftsCount;
+      pointsRef.current.rightGifts = val;
+      setRightGiftsCount(val);
     }
     if (state.victoryScore) {
       setVictoryScore(state.victoryScore);
@@ -440,6 +438,11 @@ export default function App() {
     });
 
     const unsubscribeEvents = subscribeToLiveEventsFromFirestore((event) => {
+      // Se o evento foi disparado por esta mesma aba/cliente, IGNORA para não duplicar som, reação ou cálculos
+      if (event.clientId && event.clientId === clientId) {
+        return;
+      }
+
       if (event.type === 'vote' || event.type === 'gift') {
         playVoteSound();
         spawnReaction(event.giftIcon || '🌹', event.side || 'left');
@@ -451,14 +454,10 @@ export default function App() {
 
         if (event.side === 'left') {
           setLastLeftVoteTimestamp(Date.now());
-          setLeftPoints((prev) => prev + amount);
-          if (isGift) setLeftGiftsCount((prev) => prev + (amount > 1 ? amount : 1));
           if (event.username) setLastLeftUser(event.username);
           setLastLeftText(actionText);
         } else {
           setLastRightVoteTimestamp(Date.now());
-          setRightPoints((prev) => prev + amount);
-          if (isGift) setRightGiftsCount((prev) => prev + (amount > 1 ? amount : 1));
           if (event.username) setLastRightUser(event.username);
           setLastRightText(actionText);
         }
@@ -790,6 +789,7 @@ export default function App() {
         giftIcon: icon,
         username: user,
         isEpic: amount >= 10,
+        clientId,
       }).catch(() => {});
 
       saveGameStateToFirestore({
@@ -817,13 +817,13 @@ export default function App() {
         await fetch('/api/vote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ side, amount, giftName, giftIcon: icon, username: user }),
+          body: JSON.stringify({ side, amount, giftName, giftIcon: icon, username: user, clientId }),
         });
       } catch (e) {
         // Fallback silencioso se offline
       }
     },
-    [leftCandidate, rightCandidate, lastLeftUser, lastLeftText, lastRightUser, lastRightText, spawnReaction]
+    [leftCandidate, rightCandidate, lastLeftUser, lastLeftText, lastRightUser, lastRightText, spawnReaction, clientId]
   );
 
   // Manual Chat Message: salva no Firebase Firestore e no servidor
@@ -1107,15 +1107,59 @@ export default function App() {
     }
   };
 
+  // Atualização direta de pontos via Painel ADM
+  const handleUpdatePoints = useCallback(async (newLeft: number, newRight: number) => {
+    const l = Math.max(0, newLeft);
+    const r = Math.max(0, newRight);
+    pointsRef.current.left = l;
+    pointsRef.current.right = r;
+    setLeftPoints(l);
+    setRightPoints(r);
+
+    savePoints({
+      leftPoints: l,
+      rightPoints: r,
+      leftGifts: pointsRef.current.leftGifts,
+      rightGifts: pointsRef.current.rightGifts,
+    });
+
+    broadcastSync({
+      type: 'UPDATE_POINTS',
+      leftPoints: l,
+      rightPoints: r,
+      leftGifts: pointsRef.current.leftGifts,
+      rightGifts: pointsRef.current.rightGifts,
+    });
+
+    saveGameStateToFirestore({
+      leftPoints: l,
+      rightPoints: r,
+    }).catch(() => {});
+
+    try {
+      await fetch('/api/state/points', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leftPoints: l, rightPoints: r }),
+      });
+    } catch (_) {}
+  }, []);
+
   // TikTok LIVE Backend Actions
   const handleUpdateTikTokUsername = (u: string) => {
-    setTiktokUsername(u);
+    const clean = u.replace(/^@/, '').trim();
+    setTiktokUsername(clean);
+    saveTikTokConfig({ username: clean, autoConnect: true });
+    saveGameStateToFirestore({ tiktokUsername: clean }).catch(() => {});
   };
 
   const handleConnectTikTok = async (targetUser: string) => {
     const clean = targetUser.replace(/^@/, '').trim();
     if (!clean) return;
     setTiktokUsername(clean);
+    saveTikTokConfig({ username: clean, autoConnect: true });
+    saveGameStateToFirestore({ tiktokUsername: clean }).catch(() => {});
+
     try {
       const res = await fetch('/api/tiktok/connect', {
         method: 'POST',
@@ -1149,10 +1193,11 @@ export default function App() {
       } else {
         setTiktokStatus((prev) => ({
           ...prev,
-          status: 'connected',
+          status: data.status || 'connected',
           username: clean,
-          lastError: '',
+          lastError: data.status === 'waiting' ? data.message : '',
         }));
+        addTiktokLog('status', `TikTok LIVE: Conectado ao perfil @${clean}`);
       }
     } catch (err: any) {
       setTiktokStatus((prev) => ({
@@ -1257,9 +1302,6 @@ export default function App() {
         onOpenAdmin={() => setIsPasswordModalOpen(true)}
         victoryScore={victoryScore}
         roundNumber={roundNumber}
-        onUpdateRoundNumber={handleUpdateRoundNumber}
-        musicTrack={musicTrack}
-        onChangeMusicTrack={handleMusicChange}
       />
 
       {/* ALERTA DE RETA FINAL: SE NINGUÉM MANDAR MAIS PONTO, QUEM TÁ NA FRENTE VAI GANHAR */}
@@ -1414,6 +1456,9 @@ export default function App() {
         victoryScore={victoryScore}
         onUpdateVictoryScore={handleUpdateVictoryScore}
         onResetVictoryScore={handleResetVictoryScore}
+        leftPoints={leftPoints}
+        rightPoints={rightPoints}
+        onUpdatePoints={handleUpdatePoints}
         tiktokStatus={tiktokStatus}
         tiktokUsername={tiktokUsername}
         onChangeTikTokUsername={handleUpdateTikTokUsername}

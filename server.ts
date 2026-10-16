@@ -7,14 +7,7 @@ import { fileURLToPath } from 'url';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
 
-const require = createRequire(import.meta.url);
-let TikTokLiveConnectionClass: any = null;
-try {
-  const tlc = require('tiktok-live-connector');
-  TikTokLiveConnectionClass = tlc.TikTokLiveConnection || tlc.WebcastPushConnection || tlc.default || tlc;
-} catch (e) {
-  console.warn('tiktok-live-connector import error:', e);
-}
+import { TikTokLiveConnection } from 'tiktok-live-connector';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -235,7 +228,8 @@ function addVote(
   amount: number,
   giftName?: string,
   giftIcon?: string,
-  username?: string
+  username?: string,
+  clientId?: string
 ) {
   if (serverState.isRoundOver) return;
 
@@ -273,7 +267,8 @@ function addVote(
 
   saveStateToDisk();
 
-  if (firestoreDb) {
+  // Apenas grava no Firestore se o evento não tiver vindo de um cliente que já o gravou
+  if (firestoreDb && !clientId) {
     try {
       const id = `evt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const evtRef = doc(firestoreDb, 'live_events', id);
@@ -286,6 +281,7 @@ function addVote(
         giftIcon: newMsg.giftIcon || '🎁',
         username: user,
         isEpic: amount >= 10,
+        clientId: '',
         timestamp: Date.now(),
       }).catch(() => {});
 
@@ -302,6 +298,7 @@ function addVote(
     giftIcon: newMsg.giftIcon,
     username: user,
     isEpic: amount >= 10,
+    clientId,
     state: serverState,
   });
 }
@@ -630,12 +627,25 @@ app.post('/api/music', (req: Request, res: Response) => {
 
 // 9. Vote Trigger
 app.post('/api/vote', (req: Request, res: Response) => {
-  const { side, amount, giftName, giftIcon, username } = req.body;
+  const { side, amount, giftName, giftIcon, username, clientId } = req.body;
   if (side === 'left' || side === 'right') {
-    addVote(side, amount || 1, giftName, giftIcon, username);
+    addVote(side, amount || 1, giftName, giftIcon, username, clientId);
     return res.json({ success: true, state: serverState });
   }
   res.status(400).json({ error: 'Lado inválido' });
+});
+
+// 9.1 Direct Points Update (from Admin Panel)
+app.post('/api/state/points', (req: Request, res: Response) => {
+  const { leftPoints, rightPoints } = req.body;
+  if (typeof leftPoints === 'number') serverState.leftPoints = Math.max(0, leftPoints);
+  if (typeof rightPoints === 'number') serverState.rightPoints = Math.max(0, rightPoints);
+  saveStateToDisk();
+  broadcastToClients({
+    type: 'STATE_SYNC',
+    state: serverState,
+  });
+  res.json({ success: true, state: serverState });
 });
 
 // 10. Chat Trigger
@@ -690,7 +700,7 @@ app.get('/api/tiktok/status', (_req: Request, res: Response) => {
 });
 
 // Reusable TikTok Live Connection Handler
-async function connectToTikTok(targetUsername: string = 'leonardosutello'): Promise<{ success: boolean; message: string }> {
+async function connectToTikTok(targetUsername: string = 'leonardosutello'): Promise<{ success: boolean; message: string; status?: string }> {
   const cleanUsername = (targetUsername || 'leonardosutello').replace(/^@/, '').trim();
   if (!cleanUsername) {
     return { success: false, message: 'Nome de usuário vazio' };
@@ -718,19 +728,14 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
   });
 
   try {
-    if (!TikTokLiveConnectionClass) {
-      throw new Error('Módulo TikTokLiveConnection não encontrado no servidor');
-    }
-
-    const conn = new TikTokLiveConnectionClass(cleanUsername, {
+    const conn: any = new TikTokLiveConnection(cleanUsername, {
       processInitialData: false,
       enableExtendedGiftInfo: true,
-      requestPollingIntervalMs: 1000,
       clientParams: {
         app_language: 'pt-BR',
         device_platform: 'web',
       },
-    });
+    } as any);
 
     conn.on('connected', (state: any) => {
       connectionStatus = 'connected';
@@ -859,8 +864,32 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
     return { success: true, message: `Conectado à live de @${cleanUsername}!` };
   } catch (error: any) {
     const errorText = error?.message || 'Falha ao conectar no TikTok';
+    const isUserOffline =
+      errorText.includes("isn't online") ||
+      errorText.includes('offline') ||
+      errorText.includes('ended') ||
+      errorText.includes('LIVE has ended');
+
+    if (isUserOffline) {
+      connectionStatus = 'disconnected';
+      lastErrorMessage = `Aguardando live iniciar: @${cleanUsername} ainda não abriu transmissão ao vivo no TikTok. O servidor monitora e conectará automaticamente assim que a live abrir.`;
+      console.log(`[TikTok LIVE] @${cleanUsername} está offline no momento. Monitorando...`);
+      broadcastToClients({
+        type: 'status',
+        status: 'disconnected',
+        username: cleanUsername,
+        lastError: lastErrorMessage,
+      });
+      return {
+        success: true,
+        status: 'waiting',
+        message: `Monitorando @${cleanUsername}: assim que você iniciar a live no TikTok, a conexão será ativada automaticamente!`,
+      };
+    }
+
     connectionStatus = 'error';
     lastErrorMessage = errorText;
+    console.error(`[TikTok LIVE] Erro na conexão:`, errorText);
     broadcastToClients({
       type: 'status',
       status: 'error',
@@ -879,7 +908,7 @@ app.post('/api/tiktok/connect', async (req: Request, res: Response) => {
   if (result.success) {
     return res.json(result);
   } else {
-    return res.status(500).json({ error: result.message });
+    return res.status(400).json({ error: result.message });
   }
 });
 

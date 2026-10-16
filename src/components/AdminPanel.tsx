@@ -84,6 +84,9 @@ interface AdminPanelProps {
   victoryScore: VictoryScore;
   onUpdateVictoryScore: (score: VictoryScore) => void;
   onResetVictoryScore: () => void;
+  leftPoints?: number;
+  rightPoints?: number;
+  onUpdatePoints?: (leftPoints: number, rightPoints: number) => void;
   tiktokStatus: TikTokStatus;
   tiktokUsername: string;
   onChangeTikTokUsername: (username: string) => void;
@@ -181,6 +184,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   victoryScore,
   onUpdateVictoryScore,
   onResetVictoryScore,
+  leftPoints = 0,
+  rightPoints = 0,
+  onUpdatePoints,
   tiktokStatus,
   tiktokUsername,
   onChangeTikTokUsername,
@@ -198,10 +204,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [copiedAdminUrl, setCopiedAdminUrl] = useState(false);
   const [customTimeInput, setCustomTimeInput] = useState(String(roundDuration));
   const [customRoundInput, setCustomRoundInput] = useState(String(roundNumber));
+  const [customLeftPoints, setCustomLeftPoints] = useState(String(leftPoints));
+  const [customRightPoints, setCustomRightPoints] = useState(String(rightPoints));
   const [isConnectingTikTok, setIsConnectingTikTok] = useState(false);
   const [testSuccessMessage, setTestSuccessMessage] = useState('');
   const [customAudioInfo, setCustomAudioInfo] = useState(() => getCustomAudioInfo());
   const [audioUploadError, setAudioUploadError] = useState('');
+
+  React.useEffect(() => {
+    setCustomLeftPoints(String(leftPoints));
+    setCustomRightPoints(String(rightPoints));
+  }, [leftPoints, rightPoints]);
 
   const handleCustomAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -287,6 +300,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const currentEditingCandidate = formCandidate;
 
+  const handleSelectQuickAvatar = (av: typeof QUICK_AVATARS[0]) => {
+    if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current);
+    isEditingRef.current = false;
+    const cleanName = av.name.split(' (')[0].toUpperCase();
+    const updated: Candidate = {
+      ...formCandidate,
+      name: cleanName,
+      number: av.number,
+      photoUrl: av.url,
+      party: av.party || formCandidate.party,
+      vice: av.vice || formCandidate.vice,
+    };
+    setFormCandidate(updated);
+    onUpdateCandidate(editingSide, updated);
+    setCandidateSavedFeedback(true);
+    setTimeout(() => setCandidateSavedFeedback(false), 2500);
+  };
+
   const handleCandidateFieldChange = (field: keyof Candidate, value: any) => {
     isEditingRef.current = true;
     const updated = {
@@ -295,12 +326,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     };
     setFormCandidate(updated);
 
-    // Auto-save com debounce de 450ms sem travar o teclado ou pular o cursor
+    // Auto-save com debounce de 350ms sem travar o teclado ou pular o cursor
     if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current);
     debounceSaveTimerRef.current = setTimeout(() => {
       onUpdateCandidate(editingSide, updated);
       isEditingRef.current = false;
-    }, 450);
+      setCandidateSavedFeedback(true);
+      setTimeout(() => setCandidateSavedFeedback(false), 1800);
+    }, 350);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -335,16 +368,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
-          handleCandidateFieldChange('photoUrl', compressedDataUrl);
-        } else {
-          handleCandidateFieldChange('photoUrl', rawDataUrl);
-        }
+        const compressedUrl = ctx
+          ? canvas.toDataURL('image/jpeg', 0.78)
+          : rawDataUrl;
+
+        if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current);
+        isEditingRef.current = false;
+        const updated = { ...formCandidate, photoUrl: compressedUrl };
+        setFormCandidate(updated);
+        onUpdateCandidate(editingSide, updated);
+        setCandidateSavedFeedback(true);
+        setTimeout(() => setCandidateSavedFeedback(false), 2500);
       };
       img.onerror = () => {
-        handleCandidateFieldChange('photoUrl', rawDataUrl);
+        if (debounceSaveTimerRef.current) clearTimeout(debounceSaveTimerRef.current);
+        isEditingRef.current = false;
+        const updated = { ...formCandidate, photoUrl: rawDataUrl };
+        setFormCandidate(updated);
+        onUpdateCandidate(editingSide, updated);
+        setCandidateSavedFeedback(true);
+        setTimeout(() => setCandidateSavedFeedback(false), 2500);
       };
       img.src = rawDataUrl;
     };
@@ -976,6 +1019,91 @@ tiktokLiveConnection.on('gift', data => {
                   </button>
                 </div>
               </div>
+
+              {/* AJUSTE MANUAL DIRETO DE PONTUAÇÃO (PLACAR EM TEMPO REAL) */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950/40 border-2 border-indigo-500/50 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🎯</span>
+                    <div>
+                      <h4 className="text-xs font-black text-indigo-300 uppercase tracking-wide">
+                        Ajuste Direto de Pontos da Rodada
+                      </h4>
+                      <p className="text-[10px] text-slate-400">
+                        Digite os pontos exatos de cada lado para sincronizar imediatamente com a tela da Live e banco de dados.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-digital font-black text-sm">
+                    <span className="px-2 py-0.5 rounded-lg bg-red-600 text-white shadow border border-red-400">
+                      {leftPoints}
+                    </span>
+                    <span className="text-yellow-400 text-xs">✕</span>
+                    <span className="px-2 py-0.5 rounded-lg bg-blue-600 text-white shadow border border-blue-400">
+                      {rightPoints}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-slate-800">
+                  <div className="space-y-1">
+                    <label className="text-[10.5px] font-bold text-red-400 block truncate">
+                      Pontos {leftCandidate.name} ({leftCandidate.number}):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={customLeftPoints}
+                      onChange={(e) => setCustomLeftPoints(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-digital font-bold text-white focus:outline-none focus:border-red-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10.5px] font-bold text-blue-400 block truncate">
+                      Pontos {rightCandidate.name} ({rightCandidate.number}):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={customRightPoints}
+                      onChange={(e) => setCustomRightPoints(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-digital font-bold text-white focus:outline-none focus:border-blue-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onUpdatePoints) {
+                        const l = parseInt(customLeftPoints, 10);
+                        const r = parseInt(customRightPoints, 10);
+                        onUpdatePoints(isNaN(l) ? 0 : l, isNaN(r) ? 0 : r);
+                      }
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-zinc-950 font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow transition-all"
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    <span>APLICAR PONTOS NA LIVE AGORA</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onUpdatePoints) {
+                        onUpdatePoints(0, 0);
+                        setCustomLeftPoints('0');
+                        setCustomRightPoints('0');
+                      }
+                    }}
+                    className="py-2 px-3 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-300 border border-red-800/60 font-bold text-xs cursor-pointer active:scale-95 transition-all"
+                  >
+                    Zerar Pontos
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1224,13 +1352,7 @@ tiktokLiveConnection.on('gift', data => {
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => {
-                        handleCandidateFieldChange('photoUrl', av.url);
-                        handleCandidateFieldChange('name', av.name.split(' (')[0].toUpperCase());
-                        handleCandidateFieldChange('number', av.number);
-                        handleCandidateFieldChange('party', av.party);
-                        handleCandidateFieldChange('vice', av.vice);
-                      }}
+                      onClick={() => handleSelectQuickAvatar(av)}
                       className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-amber-400 flex items-center gap-2 cursor-pointer transition-all text-left"
                     >
                       <img
