@@ -15,133 +15,80 @@ interface TopHeaderProps {
 export const TopHeader: React.FC<TopHeaderProps> = ({
   leftCandidate,
   rightCandidate,
-  leftPoints,
-  rightPoints,
   timeLeft,
   onOpenAdmin,
   victoryScore,
   roundNumber,
 }) => {
-  const total = leftPoints + rightPoints;
-  const difference = Math.abs(leftPoints - rightPoints);
-
-  const leader =
-    leftPoints > rightPoints ? 'left' : rightPoints > leftPoints ? 'right' : 'draw';
-
   // Format timer 02:05
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
   const formattedTime = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
   return (
-    <header className="w-full flex flex-col items-center select-none pt-1 shrink-0 px-2">
-      {/* 1. Golden 3D Title Banner: ELEIÇÕES 2026 INTERATIVO (Secret tap to open ADM) */}
+    <header className="w-full max-w-md flex flex-col items-center select-none pt-1 shrink-0 px-2 z-20">
+      {/* 1. COMPACT GOLDEN TITLE (Secret tap opens Admin) */}
       <div
         onClick={onOpenAdmin}
-        title="Eleições 2026 Interativo"
-        className="relative flex flex-col items-center mb-1 cursor-default active:scale-[0.99] transition-transform"
+        title="Toque para Painel Admin"
+        className="flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform mb-1"
       >
-        {/* Brazilian Ribbon background */}
-        <div className="absolute -inset-x-6 -top-1 h-10 bg-gradient-to-r from-emerald-600 via-yellow-400 to-emerald-600 rounded-full blur-[2px] opacity-70" />
-
-        <div className="relative z-10 flex flex-col items-center">
-          {/* Main Gold 3D Title */}
-          <h1
-            className="text-2xl sm:text-3xl font-black italic tracking-wider uppercase text-yellow-300 drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)]"
-            style={{
-              textShadow: '0 2px 0 #b45309, 0 4px 0 #78350f, 0 6px 12px rgba(0,0,0,0.9)',
-              fontFamily: "'Chakra Petch', sans-serif",
-            }}
-          >
-            ELEIÇÕES 2026
-          </h1>
-
-          {/* INTERATIVO Blue Banner Badge */}
-          <div className="px-5 py-0.5 -mt-1 rounded-full bg-gradient-to-r from-blue-700 via-blue-500 to-blue-700 border-2 border-yellow-300 shadow-md">
-            <span className="text-[10px] sm:text-xs font-black tracking-widest text-white uppercase drop-shadow">
-              INTERATIVO
-            </span>
-          </div>
-        </div>
+        <span className="text-sm">🗳️</span>
+        <h1
+          className="text-base sm:text-lg font-black italic tracking-wider uppercase text-yellow-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]"
+          style={{ fontFamily: "'Chakra Petch', sans-serif" }}
+        >
+          ELEIÇÕES 2026
+        </h1>
+        <span className="px-2 py-0.2 rounded-full bg-blue-600 border border-yellow-300 text-[8px] sm:text-[9px] font-black tracking-widest text-white uppercase shadow">
+          INTERATIVO
+        </span>
       </div>
 
-      {/* PLACAR DE VITÓRIAS GERAL DA SÉRIE - MAIOR E NO MEIO, ULTRA LIMPO */}
-      <div className="w-full max-w-md flex items-center justify-between px-3 py-1.5 mb-1.5 bg-black/90 rounded-2xl border-2 border-amber-500/50 shadow-2xl backdrop-blur-md">
-        {/* Left: Rodada limpa sem botões */}
-        <div className="flex items-center gap-1.5 min-w-[75px]">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span className="text-[10px] sm:text-xs font-black tracking-wider text-amber-400 uppercase font-digital">
-            RODADA #{roundNumber}
+      {/* 2. UNIFIED COMPACT STATUS BAR: RODADA, PLACAR GERAL, DIGITAL TIMER & AO VIVO */}
+      <div className="w-full flex items-center justify-between px-2.5 py-1 bg-black/90 rounded-xl border border-amber-500/50 shadow-xl backdrop-blur-md">
+        {/* Left: Rodada + Placar Left */}
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+          <span className="text-[9px] sm:text-[10px] font-black tracking-wider text-amber-400 uppercase font-digital">
+            R#{roundNumber}
           </span>
-        </div>
-
-        {/* Center: Placar Geral MAIOR e centralizado */}
-        <div className="flex flex-col items-center justify-center flex-1">
-          <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-amber-300 drop-shadow leading-none mb-1">
-            PLACAR
-          </span>
-          <div className="flex items-center gap-2 sm:gap-2.5">
-            <span className="min-w-[34px] sm:min-w-[44px] px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-xl bg-red-600 text-white font-digital font-black text-lg sm:text-2xl text-center shadow-lg border-2 border-red-400/90 drop-shadow">
+          <div className="flex items-center gap-1 ml-1 bg-red-950/80 px-1.5 py-0.5 rounded-lg border border-red-500/60 shadow">
+            <span className="text-[7.5px] font-black text-red-300 uppercase truncate max-w-[40px]">
+              {leftCandidate.name.split(' ')[0]}
+            </span>
+            <span className="font-digital font-black text-xs sm:text-sm text-white">
               {victoryScore.left}
             </span>
-            <span className="text-yellow-400 font-black text-base sm:text-xl drop-shadow">✕</span>
-            <span className="min-w-[34px] sm:min-w-[44px] px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-xl bg-blue-600 text-white font-digital font-black text-lg sm:text-2xl text-center shadow-lg border-2 border-blue-400/90 drop-shadow">
-              {victoryScore.right}
-            </span>
           </div>
         </div>
 
-        {/* Right: AO VIVO limpo e alinhado */}
-        <div className="flex items-center justify-end min-w-[75px]">
-          <span className="px-2.5 py-1 rounded-full bg-red-600 text-white text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow-lg animate-pulse border border-red-400/80">
-            AO VIVO
-          </span>
-        </div>
-      </div>
-
-      {/* 2. Timer & Gifts Row (Rosa +1 - Timer 02:05 - Sorvete +1) */}
-      <div className="w-full max-w-md flex items-center justify-between px-1 my-0.5">
-        {/* Left: Gift +1 / Voto Left (Vermelho) */}
-        <div className="flex flex-col items-center">
-          <div className="relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border border-red-500/80 shadow">
-            <span className="text-2xl sm:text-3xl filter drop-shadow">
-              {leftCandidate.primaryGift.icon || '🌹'}
-            </span>
-            <span className="px-1.5 py-0.5 rounded-full text-white font-black font-digital text-[11px] shadow border border-white/80 bg-red-600">
-              +1
-            </span>
-          </div>
-          <div className="mt-1 px-2.5 py-0.5 rounded-md text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border border-red-400 bg-red-600 whitespace-nowrap">
-            {leftCandidate.primaryGift.name || 'Rosa'} p/ {leftCandidate.name.split(' ')[0]}
-          </div>
-        </div>
-
-        {/* Center: Black Pill Timer (02:05) */}
-        <div className="flex flex-col items-center mx-1">
+        {/* Center: BIG DIGITAL TIMER */}
+        <div className="flex flex-col items-center justify-center px-1">
           <div
-            className={`px-4 sm:px-6 py-1 rounded-2xl bg-black/95 border-2 shadow-2xl font-digital font-black text-2xl sm:text-3xl tracking-widest text-white ${
+            className={`px-3 py-0.5 rounded-xl bg-black border font-digital font-black text-base sm:text-lg tracking-widest leading-none shadow-inner ${
               timeLeft <= 10
                 ? 'border-red-500 text-red-400 animate-pulse scale-105 shadow-red-500/50'
-                : 'border-slate-700 text-white'
+                : 'border-slate-700 text-amber-300'
             }`}
           >
             {formattedTime}
           </div>
         </div>
 
-        {/* Right: Gift +1 / Voto Right (Azul) */}
-        <div className="flex flex-col items-center relative">
-          <div className="relative flex items-center gap-1 bg-black/60 px-2 py-0.5 rounded-2xl border border-blue-500/80 shadow">
-            <span className="text-2xl sm:text-3xl filter drop-shadow">
-              {rightCandidate.primaryGift.icon || '🍦'}
+        {/* Right: Placar Right + AO VIVO */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 bg-blue-950/80 px-1.5 py-0.5 rounded-lg border border-blue-500/60 shadow">
+            <span className="font-digital font-black text-xs sm:text-sm text-white">
+              {victoryScore.right}
             </span>
-            <span className="px-1.5 py-0.5 rounded-full text-white font-black font-digital text-[11px] shadow border border-white/80 bg-blue-600">
-              +1
+            <span className="text-[7.5px] font-black text-blue-300 uppercase truncate max-w-[40px]">
+              {rightCandidate.name.split(' ')[0]}
             </span>
           </div>
-          <div className="mt-1 px-2.5 py-0.5 rounded-md text-white font-black text-[9px] sm:text-[10px] tracking-tight uppercase shadow border border-blue-400 bg-blue-600 whitespace-nowrap">
-            {rightCandidate.primaryGift.name || 'Sorvete'} p/ {rightCandidate.name.split(' ')[0]}
-          </div>
+          <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[8px] font-black uppercase tracking-wider shadow animate-pulse border border-red-400/80 shrink-0">
+            LIVE
+          </span>
         </div>
       </div>
     </header>

@@ -1347,48 +1347,41 @@ export default function App() {
         roundNumber={roundNumber}
       />
 
-      {/* ALERTA DE RETA FINAL: SE NINGUÉM MANDAR MAIS PONTO, QUEM TÁ NA FRENTE VAI GANHAR */}
+      {/* ALERTA DE RETA FINAL: COMPACTO E NÃO EMPURRA A TELA */}
       {timeLeft > 0 && timeLeft <= 20 && !isRoundOver && (
-        <div className="w-full max-w-md px-2 my-0.5 animate-pulse z-30">
+        <div className="w-full max-w-md px-2 my-0.5 animate-pulse z-30 shrink-0">
           <div
-            className={`w-full py-1.5 px-3 rounded-2xl border-2 shadow-2xl flex items-center justify-between text-white font-black text-xs ${
+            className={`w-full py-0.5 px-2.5 rounded-xl border shadow-lg flex items-center justify-between text-white font-black text-[9px] sm:text-[10px] ${
               leftPoints > rightPoints
-                ? 'bg-gradient-to-r from-red-950 via-red-900 to-amber-950 border-red-500 shadow-red-500/40'
+                ? 'bg-gradient-to-r from-red-950 via-red-900 to-amber-950 border-red-500'
                 : rightPoints > leftPoints
-                ? 'bg-gradient-to-r from-blue-950 via-blue-900 to-amber-950 border-blue-500 shadow-blue-500/40'
-                : 'bg-gradient-to-r from-amber-950 via-purple-900 to-amber-950 border-amber-400 shadow-amber-500/40'
+                ? 'bg-gradient-to-r from-blue-950 via-blue-900 to-amber-950 border-blue-500'
+                : 'bg-gradient-to-r from-amber-950 via-purple-900 to-amber-950 border-amber-400'
             }`}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-xl animate-bounce shrink-0">🚨</span>
-              <div className="flex flex-col min-w-0 leading-tight">
-                <span className="text-[9px] sm:text-[10px] text-amber-300 font-extrabold uppercase tracking-tight">
-                  RETA FINAL! SE NINGUÉM ENVIAR MAIS PONTOS:
-                </span>
-                <span className="text-[11px] sm:text-[12.5px] font-black uppercase text-white truncate drop-shadow">
-                  {leftPoints > rightPoints ? (
-                    <>👑 <strong className="text-red-300">{leftCandidate.name}</strong> VAI GANHAR A RODADA!</>
-                  ) : rightPoints > leftPoints ? (
-                    <>👑 <strong className="text-blue-300">{rightCandidate.name}</strong> VAI GANHAR A RODADA!</>
-                  ) : (
-                    <>⚡ EMPATE DRAMÁTICO! QUALQUER PRESENTE DECIDE O VENCEDOR!</>
-                  )}
-                </span>
-              </div>
-            </div>
-            <div className="shrink-0 pl-2">
-              <span className="px-2.5 py-1 rounded-full bg-amber-400 text-zinc-950 font-digital font-black text-xs sm:text-sm shadow">
-                {timeLeft}s
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-sm shrink-0">🚨</span>
+              <span className="truncate">
+                {leftPoints > rightPoints ? (
+                  <>RETA FINAL: <strong className="text-red-300 uppercase">{leftCandidate.name.split(' ')[0]}</strong> NA LIDERANÇA!</>
+                ) : rightPoints > leftPoints ? (
+                  <>RETA FINAL: <strong className="text-blue-300 uppercase">{rightCandidate.name.split(' ')[0]}</strong> NA LIDERANÇA!</>
+                ) : (
+                  <>EMPATE! QUALQUER PRESENTE DECIDE!</>
+                )}
               </span>
             </div>
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-zinc-950 font-digital font-black text-[9px] shadow shrink-0 ml-1">
+              {timeLeft}s
+            </span>
           </div>
         </div>
       )}
 
-      {/* 2. CENTER SECTION: CANDIDATE BOXES (PHOTO + NAME + GIFTS DIRECTLY BELOW) & SINGLE URNA */}
-      <main className="w-full max-w-md flex-1 flex flex-col items-center justify-between gap-1 sm:gap-1.5 px-1 sm:px-2 my-auto overflow-y-auto min-h-0">
-        {/* Top: Left & Right Candidate Boxes with Gifts List directly below each box */}
-        <div className="w-full flex flex-row items-start justify-center gap-1.5 sm:gap-2.5">
+      {/* 2. CENTER SECTION: CANDIDATE BOXES & SINGLE URNA ELETRÔNICA (TODOS NA MESMA TELA) */}
+      <main className="w-full max-w-md flex-1 flex flex-col items-center justify-center gap-1 px-1 sm:px-2 min-h-0 overflow-hidden my-auto">
+        {/* Top: Left & Right Candidate Boxes com Pontuação Gigante e Presentes Visíveis */}
+        <div className="w-full flex flex-row items-stretch justify-center gap-1.5 sm:gap-2">
           <CandidateBox
             side="left"
             candidate={leftCandidate}
@@ -1414,7 +1407,7 @@ export default function App() {
           />
         </div>
 
-        {/* Bottom: UMA URNA ELETRÔNICA SÓ (13 Lula, 22 Bolsonaro, mostra o presente e pra quem é) */}
+        {/* Center/Bottom: UMA URNA ELETRÔNICA SÓ (100% VISÍVEL, CONFIRMA, ANIMAÇÃO E TECLAS) */}
         <UrnaMachine
           leftCandidate={leftCandidate}
           rightCandidate={rightCandidate}

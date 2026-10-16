@@ -3,101 +3,132 @@ import { Candidate } from '../types';
 import { CartoonHand } from './HandAnimation';
 import { playKeyBeep, playUrnaConfirmSound } from '../utils/audio';
 
-interface UrnaMachineProps {
-  candidate: Candidate;
-  points: number;
-  giftsCount: number;
-  percentage: number;
-  commentCount: number; // progress 0 to 5
-  isLeading: boolean;
-  isRoundOver: boolean;
-  onVote: (side: 'left' | 'right', amount: number, giftName?: string, giftIcon?: string) => void;
+export interface UrnaMachineProps {
+  leftCandidate: Candidate;
+  rightCandidate: Candidate;
+  onVote: (
+    side: 'left' | 'right',
+    amount: number,
+    giftName?: string,
+    giftIcon?: string,
+    username?: string
+  ) => void;
   lastVoteTimestamp: number;
-  lastVoteUser?: string;
+  lastVoteSide: 'left' | 'right' | null;
   lastVoteText?: string;
+  lastVoteGiftIcon?: string;
+  lastVoteAmount?: number;
 }
 
 export const UrnaMachine: React.FC<UrnaMachineProps> = ({
-  candidate,
-  points,
-  giftsCount,
-  percentage,
-  commentCount,
-  isLeading,
-  isRoundOver,
+  leftCandidate,
+  rightCandidate,
   onVote,
   lastVoteTimestamp,
-  lastVoteUser,
+  lastVoteSide,
   lastVoteText,
+  lastVoteGiftIcon,
+  lastVoteAmount,
 }) => {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [isPressingHand, setIsPressingHand] = useState(false);
   const [handKey, setHandKey] = useState<string | null>(null);
-  // Default to BLANK white screen with logo in idle (only shows photo/name when digits are typed!)
+  const [handSide, setHandSide] = useState<'left' | 'right'>('left');
   const [typedDigits, setTypedDigits] = useState<string[]>(['', '']);
   const [isConfirmFlashing, setIsConfirmFlashing] = useState(false);
   const [showFimScreen, setShowFimScreen] = useState(false);
-  const [lastConfirmedPoints, setLastConfirmedPoints] = useState(1);
+  const [confirmedData, setConfirmedData] = useState<{
+    candidate: Candidate;
+    points: number;
+    giftText?: string;
+    giftIcon?: string;
+  } | null>(null);
 
-  // When candidate changes, keep screen in clean waiting state
-  useEffect(() => {
-    setTypedDigits(['', '']);
-  }, [candidate.number]);
-
-  // Trigger vote sequence with animated finger & TSE audio
+  // Trigger vote sequence with animated finger & TSE audio when vote event fires
   useEffect(() => {
     if (lastVoteTimestamp > 0) {
-      triggerVoteSequence(candidate.number, 1);
+      const targetSide = lastVoteSide === 'right' ? 'right' : 'left';
+      const target = targetSide === 'right' ? rightCandidate : leftCandidate;
+      triggerVoteSequence(
+        target,
+        lastVoteAmount || 1,
+        lastVoteText || (targetSide === 'right' ? 'Voto' : 'Voto'),
+        lastVoteGiftIcon || target.primaryGift.icon
+      );
     }
   }, [lastVoteTimestamp]);
 
-  const triggerVoteSequence = (numStr: string, pointsAmount = 1) => {
-    const digits = numStr.split('');
+  const triggerVoteSequence = (
+    targetCandidate: Candidate,
+    pointsAmount = 1,
+    giftText?: string,
+    giftIcon?: string
+  ) => {
+    const digits = targetCandidate.number.split('');
+    const d1 = digits[0] || '1';
+    const d2 = digits[1] || '3';
+
+    setHandSide(targetCandidate.id);
     setIsPressingHand(true);
     setShowFimScreen(false);
-    setLastConfirmedPoints(pointsAmount);
-
-    // Step 0: Ensure blank screen at start
     setTypedDigits(['', '']);
 
+    // Step 1: Finger presses first digit
     setTimeout(() => {
-      // Step 1: Finger presses first digit (e.g. '1' or '2')
-      setTypedDigits([digits[0] || '1', '']);
-      setHandKey(digits[0] || '1');
-      setActiveKey(digits[0] || '1');
+      setTypedDigits([d1, '']);
+      setHandKey(d1);
+      setActiveKey(d1);
       playKeyBeep();
 
+      // Step 2: Finger presses second digit -> Candidate Photo & Name reveal on white screen!
       setTimeout(() => {
-        // Step 2: Finger presses second digit -> Candidate Photo & Name reveal on white screen!
-        setTypedDigits([digits[0] || '1', digits[1] || '2']);
-        setHandKey(digits[1] || '2');
-        setActiveKey(digits[1] || '2');
+        setTypedDigits([d1, d2]);
+        setHandKey(d2);
+        setActiveKey(d2);
         playKeyBeep();
 
+        // Step 3: Finger swoops to green CONFIRMA key and presses it!
         setTimeout(() => {
-          // Step 3: Finger swoops to green CONFIRMA key and presses it!
           setHandKey('CONFIRMA');
           setActiveKey('CONFIRMA');
           setIsConfirmFlashing(true);
-          setShowFimScreen(true); // Flashes FIM + GRAVANDO!
+          setShowFimScreen(true);
+          setConfirmedData({
+            candidate: targetCandidate,
+            points: pointsAmount,
+            giftText,
+            giftIcon,
+          });
           playUrnaConfirmSound();
 
+          // Step 4: Release finger
           setTimeout(() => {
             setIsPressingHand(false);
             setHandKey(null);
             setActiveKey(null);
             setIsConfirmFlashing(false);
 
-            // After 2.2 seconds of FIM screen, return to clean white waiting screen
+            // Step 5: After FIM screen, return to clean waiting state
             setTimeout(() => {
               setShowFimScreen(false);
               setTypedDigits(['', '']);
-            }, 2200);
-          }, 350);
-        }, 260);
-      }, 260);
-    }, 120);
+              setConfirmedData(null);
+            }, 2000);
+          }, 320);
+        }, 240);
+      }, 240);
+    }, 100);
   };
+
+  const currentEnteredNumber = typedDigits.join('');
+  const matchedCandidate =
+    currentEnteredNumber === leftCandidate.number
+      ? leftCandidate
+      : currentEnteredNumber === rightCandidate.number
+      ? rightCandidate
+      : null;
+  const isInvalidNumber =
+    Boolean(typedDigits[0] && typedDigits[1]) && !matchedCandidate;
 
   const keypadRows = [
     ['1', '2', '3'],
@@ -106,224 +137,271 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
     ['', '0', ''],
   ];
 
-  const formattedPercentage = percentage.toFixed(1).replace('.', ',');
-  // Name and photo appear ONLY when the 2 digits have been typed!
-  const hasFullDigits = Boolean(typedDigits[0] && typedDigits[1]);
-  // O lado esquerdo é SEMPRE VERMELHO e o lado direito é SEMPRE AZUL
-  const isRedTheme = candidate.id === 'left';
+  const handleKeyClick = (keyVal: string) => {
+    playKeyBeep();
+    setActiveKey(keyVal);
+    setTimeout(() => setActiveKey(null), 120);
+
+    if (!typedDigits[0]) {
+      setTypedDigits([keyVal, '']);
+    } else if (!typedDigits[1]) {
+      setTypedDigits([typedDigits[0], keyVal]);
+    } else {
+      setTypedDigits([keyVal, '']);
+    }
+  };
+
+  const handleCorrige = () => {
+    playKeyBeep();
+    setActiveKey('CORRIGE');
+    setTimeout(() => setActiveKey(null), 120);
+    setTypedDigits(['', '']);
+    setShowFimScreen(false);
+    setConfirmedData(null);
+  };
+
+  const handleBranco = () => {
+    playKeyBeep();
+    setActiveKey('BRANCO');
+    setTimeout(() => setActiveKey(null), 120);
+    setTypedDigits(['B', 'R']);
+  };
+
+  const handleConfirma = () => {
+    setActiveKey('CONFIRMA');
+    setTimeout(() => setActiveKey(null), 150);
+
+    const target =
+      matchedCandidate ||
+      (currentEnteredNumber === ''
+        ? lastVoteSide === 'right'
+          ? rightCandidate
+          : leftCandidate
+        : null);
+
+    if (target) {
+      setIsConfirmFlashing(true);
+      setShowFimScreen(true);
+      setConfirmedData({
+        candidate: target,
+        points: 1,
+        giftText: 'Urna Manual',
+        giftIcon: '🗳️',
+      });
+      playUrnaConfirmSound();
+      onVote(target.id, 1, 'Urna Manual', '🗳️');
+
+      setTimeout(() => {
+        setIsConfirmFlashing(false);
+        setTimeout(() => {
+          setShowFimScreen(false);
+          setTypedDigits(['', '']);
+          setConfirmedData(null);
+        }, 2000);
+      }, 320);
+    } else {
+      playKeyBeep();
+    }
+  };
 
   return (
-    <div className="flex-1 flex flex-col items-center min-w-0 max-w-[215px] sm:max-w-[250px]">
-      {/* 1. TOP SCORE CARD WITH CANDIDATE PHOTO & NAME */}
-      <div
-        className={`w-full rounded-2xl p-1.5 sm:p-2 flex flex-col justify-between bg-slate-950/95 border shadow-xl relative transition-all ${
-          isRedTheme
-            ? 'border-red-500/70 border-t-4 border-t-red-500 shadow-red-500/20'
-            : 'border-blue-500/70 border-t-4 border-t-blue-500 shadow-blue-500/20'
-        }`}
-      >
-        {/* Candidate Header: Photo, Name & Number Nítidos */}
-        <div className="flex items-center justify-between gap-1 pb-1 border-b border-slate-800">
-          <div className="flex items-center gap-1.5 min-w-0">
-            {/* Foto Nítida do Candidato */}
-            <div
-              className={`w-9 h-9 sm:w-11 sm:h-11 rounded-full border-2 overflow-hidden shrink-0 shadow bg-zinc-800 ${
-                isRedTheme ? 'border-red-400' : 'border-blue-400'
-              }`}
+    <div className="w-full flex flex-col items-center max-w-[390px] sm:max-w-[420px] mx-auto select-none my-0.5">
+      {/* 1. PHYSICAL URNA ELETRÔNICA CASING */}
+      <div className="relative w-full rounded-2xl p-1.5 sm:p-2 bg-gradient-to-b from-slate-200 via-gray-300 to-slate-400 border-2 border-slate-400 shadow-2xl flex flex-col">
+        {/* Urna Faceplate Header */}
+        <div className="flex items-center justify-between px-1 pb-0.5 mb-1 border-b border-slate-300/80">
+          <div className="flex items-center gap-1">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              className="shrink-0 drop-shadow-sm"
             >
-              <img
-                src={candidate.photoUrl}
-                alt={candidate.name}
-                className="w-full h-full object-cover object-top"
-                loading="eager"
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                fill="#009b3a"
+                stroke="#fed100"
+                strokeWidth="2"
               />
-            </div>
-            <div className="flex flex-col min-w-0 text-left">
-              <span className="text-[10px] sm:text-xs font-black text-white truncate uppercase tracking-tight leading-none">
-                {candidate.name}
-              </span>
-              <span
-                className={`text-[9px] font-digital font-black ${
-                  candidate.id === 'left' ? 'text-red-500' : 'text-blue-500'
-                }`}
-              >
-                NÚMERO {candidate.number}
-              </span>
-            </div>
+              <circle cx="12" cy="12" r="6" fill="#002776" />
+              <path
+                d="M7 12 C10 10 14 10 17 12"
+                stroke="#ffffff"
+                strokeWidth="1.2"
+              />
+              <circle cx="12" cy="12" r="1.5" fill="#fed100" />
+            </svg>
+            <span className="text-[8px] sm:text-[9px] font-black tracking-tight text-zinc-800 uppercase font-sans">
+              JUSTIÇA ELEITORAL • URNA ELETRÔNICA
+            </span>
           </div>
-
-          {isLeading && (
-            <span className="px-1.5 py-0.5 rounded-full bg-amber-400 text-zinc-950 font-black text-[7.5px] uppercase tracking-tighter shrink-0 animate-bounce shadow">
-              👑 LÍDER
-            </span>
-          )}
-        </div>
-
-        {/* Big Massive Points Number (56 / 88) */}
-        <div className="flex flex-col items-center justify-center my-0.5">
-          <span
-            className="text-4xl sm:text-5xl font-black font-digital tracking-tight text-white leading-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
-            style={{ fontFamily: "'Chakra Petch', sans-serif" }}
-          >
-            {points}
-          </span>
-          <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-            PONTOS
+          <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest bg-zinc-200/90 px-1 py-0.2 rounded border border-zinc-400">
+            OFICIAL
           </span>
         </div>
 
-        {/* Footer: Percentage & Gifts Count */}
-        <div className="flex items-center justify-between text-[8.5px] sm:text-[9.5px] font-bold text-slate-300">
-          <span className="text-white font-black">{formattedPercentage}%</span>
-          <span className="text-slate-400">🎁 {giftsCount} pres.</span>
-        </div>
-
-        {/* Regra Exata Solicitada: "5 comentários número 22 = 1 ponto" / "5 comentários número 13 = 1 ponto" */}
-        <div className="mt-1 pt-1 border-t border-slate-800/80 flex items-center justify-between text-[7.5px] sm:text-[8px] leading-tight">
-          <span className="text-amber-300 font-extrabold truncate">
-            5 comentários número {candidate.number} = 1 ponto
-          </span>
-          <span
-            className={`font-black font-digital px-1 py-0.2 rounded shrink-0 ml-1 shadow ${
-              isRedTheme ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
-            }`}
-          >
-            {commentCount}/5
-          </span>
-        </div>
-      </div>
-
-      {/* 2. Donor Toast Ticker Badge (@Mara • Rosa x2 • +2 pontos) */}
-      <div className="w-full my-1 min-h-[19px] flex items-center justify-center">
-        <div className="w-full px-1.5 py-0.5 rounded-full bg-black/85 border border-slate-700/80 text-[8px] sm:text-[9px] text-slate-300 truncate text-center shadow">
-          {lastVoteUser ? (
-            <span>
-              <strong className="text-amber-300">{lastVoteUser}</strong> • {lastVoteText || 'votou'}
-            </span>
-          ) : (
-            <span className="text-slate-400 italic">Digite {candidate.number} no chat</span>
-          )}
-        </div>
-      </div>
-
-      {/* 3. PHYSICAL URNA ELETRÔNICA COM TELA BRANCA OFICIAL & TECLADO */}
-      <div className="relative w-full rounded-xl p-1.5 bg-gradient-to-b from-slate-200 via-gray-300 to-slate-400 border border-slate-400 shadow-2xl flex flex-col">
-        {/* Urna Face: Split Screen (Left) and Keypad (Right) */}
-        <div className="grid grid-cols-12 gap-1 items-stretch">
+        {/* Urna Split: Screen (Left 7 cols) & Keypad (Right 5 cols) */}
+        <div className="grid grid-cols-12 gap-1 items-stretch relative">
           {/* TELA BRANCA OFICIAL COM LOGO DA JUSTIÇA ELEITORAL */}
-          <div className="col-span-7 bg-white border-2 border-slate-500 rounded-md p-1.5 flex flex-col justify-between min-h-[104px] sm:min-h-[118px] text-zinc-950 shadow-inner relative overflow-hidden">
+          <div className="col-span-7 bg-white border-2 border-slate-500 rounded-lg p-1.5 flex flex-col justify-between min-h-[110px] sm:min-h-[120px] text-zinc-950 shadow-inner relative overflow-hidden urna-screen-scanline">
             {showFimScreen ? (
-              /* FIM Confirmation Screen (Tela de finalização oficial da urna) */
-              <div className="flex flex-col items-center justify-center w-full h-full text-center py-2 animate-pulse">
+              /* FIM Confirmation Screen */
+              <div className="flex flex-col items-center justify-center w-full h-full text-center py-1 animate-pulse">
                 <span className="text-3xl sm:text-4xl font-black font-screen tracking-widest text-zinc-950 leading-none">
                   FIM
                 </span>
-                <span className="text-[7.5px] sm:text-[8px] font-black uppercase tracking-widest text-zinc-700 mt-1">
+                <span className="text-[7.5px] sm:text-[8px] font-black uppercase tracking-widest text-zinc-700 mt-0.5">
                   VOTO GRAVADO
                 </span>
-                <span
-                  className={`text-[8.5px] sm:text-[9.5px] font-black uppercase mt-1 px-1.5 py-0.2 rounded-full ${
-                    isRedTheme ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                  }`}
-                >
-                  +{lastConfirmedPoints} PONTO COMPUTADO!
-                </span>
+                {confirmedData && (
+                  <div
+                    className={`mt-1 px-1.5 py-0.2 rounded-full flex items-center gap-1 shadow ${
+                      confirmedData.candidate.id === 'left'
+                        ? 'bg-red-100 text-red-700 border border-red-300'
+                        : 'bg-blue-100 text-blue-700 border border-blue-300'
+                    }`}
+                  >
+                    <span className="text-[10px]">
+                      {confirmedData.giftIcon || '🗳️'}
+                    </span>
+                    <span className="text-[8px] sm:text-[8.5px] font-black uppercase font-digital truncate max-w-[120px]">
+                      +{confirmedData.points} P/ {confirmedData.candidate.name.split(' ')[0]}!
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               /* White LCD Screen Content */
               <div className="flex flex-col justify-between w-full h-full leading-tight">
-                {/* Top: Logo da Justiça Eleitoral / Urna */}
+                {/* Header: Eleição Presidencial */}
                 <div className="flex items-center justify-between border-b border-zinc-200 pb-0.5">
-                  <div className="flex items-center gap-1">
-                    {/* Brasão da Justiça Eleitoral */}
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                      <circle cx="12" cy="12" r="10" fill="#009b3a" stroke="#fed100" strokeWidth="2" />
-                      <circle cx="12" cy="12" r="6" fill="#002776" />
-                      <path d="M7 12 C10 10 14 10 17 12" stroke="#ffffff" strokeWidth="1.2" />
-                      <circle cx="12" cy="12" r="1.5" fill="#fed100" />
-                    </svg>
-                    <span className="text-[6px] sm:text-[6.5px] font-black tracking-tighter text-zinc-800 uppercase font-sans">
-                      JUSTIÇA ELEITORAL
-                    </span>
-                  </div>
-                  <span className="text-[5.5px] text-zinc-400 font-bold">BR</span>
+                  <span className="text-[6.5px] sm:text-[7px] font-black text-zinc-700 uppercase">
+                    ELEIÇÕES 2026
+                  </span>
+                  <span className="text-[6px] text-zinc-500 font-bold">BR</span>
                 </div>
 
                 {/* Center: President label, Number Boxes & Candidate Photo */}
                 <div className="flex items-start justify-between w-full flex-1 gap-1 py-0.5">
                   <div className="flex flex-col text-left flex-1 min-w-0">
-                    <span className="text-[5.5px] text-zinc-500 font-semibold uppercase leading-none">
+                    <span className="text-[6px] text-zinc-500 font-semibold uppercase leading-none">
                       SEU VOTO PARA
                     </span>
-                    <span className="text-[7.5px] sm:text-[8px] text-zinc-900 font-black uppercase tracking-tight">
+                    <span className="text-[8px] sm:text-[9px] text-zinc-900 font-black uppercase tracking-tight">
                       PRESIDENTE
                     </span>
 
                     {/* Digit Boxes with blinking cursor */}
                     <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[6px] text-zinc-600 font-bold">Nº:</span>
+                      <span className="text-[6.5px] text-zinc-600 font-bold">
+                        Nº:
+                      </span>
                       <div className="flex gap-0.5">
-                        <span className="w-3.5 h-4.5 sm:w-4 sm:h-5 bg-white text-zinc-950 font-digital font-black text-xs sm:text-sm flex items-center justify-center rounded border-2 border-zinc-900 shadow-inner">
+                        <span className="w-4 h-5 sm:w-5 sm:h-5.5 bg-white text-zinc-950 font-digital font-black text-xs sm:text-sm flex items-center justify-center rounded border-2 border-zinc-900 shadow-inner">
                           {typedDigits[0] || (
                             <span className="w-0.5 h-3 bg-zinc-900 animate-pulse inline-block" />
                           )}
                         </span>
-                        <span className="w-3.5 h-4.5 sm:w-4 sm:h-5 bg-white text-zinc-950 font-digital font-black text-xs sm:text-sm flex items-center justify-center rounded border-2 border-zinc-900 shadow-inner">
-                          {typedDigits[1] || (
-                            typedDigits[0] ? <span className="w-0.5 h-3 bg-zinc-900 animate-pulse inline-block" /> : ''
-                          )}
+                        <span className="w-4 h-5 sm:w-5 sm:h-5.5 bg-white text-zinc-950 font-digital font-black text-xs sm:text-sm flex items-center justify-center rounded border-2 border-zinc-900 shadow-inner">
+                          {typedDigits[1] ||
+                            (typedDigits[0] ? (
+                              <span className="w-0.5 h-3 bg-zinc-900 animate-pulse inline-block" />
+                            ) : (
+                              ''
+                            ))}
                         </span>
                       </div>
                     </div>
 
-                    {/* Conforme digita os 2 números, aparecem o Nome, Partido e Vice */}
-                    {hasFullDigits ? (
+                    {/* Details: Aparecem quando o número corresponde ao candidato */}
+                    {matchedCandidate ? (
                       <div className="mt-0.5 pt-0.5 border-t border-zinc-200 leading-tight space-y-0.2 animate-fade-in">
-                        <div className="text-[6.5px] sm:text-[7px] font-black text-zinc-950 uppercase truncate">
-                          {candidate.name}
+                        <div
+                          className={`text-[7.5px] sm:text-[8px] font-black uppercase truncate ${
+                            matchedCandidate.id === 'left'
+                              ? 'text-red-700'
+                              : 'text-blue-700'
+                          }`}
+                        >
+                          {matchedCandidate.name}
                         </div>
-                        <div className="text-[5.5px] sm:text-[6px] text-zinc-700 font-bold">
-                          Part: {candidate.party}
+                        <div className="text-[6px] text-zinc-700 font-bold">
+                          Part: {matchedCandidate.party}
                         </div>
-                        <div className="text-[5px] sm:text-[5.5px] text-zinc-500 font-medium truncate">
-                          Vice: {candidate.vice}
+                        <div className="text-[5.5px] text-zinc-500 font-medium truncate">
+                          Vice: {matchedCandidate.vice}
                         </div>
                       </div>
+                    ) : isInvalidNumber ? (
+                      <div className="mt-0.5 pt-0.5 border-t border-red-200 text-red-600 text-[6.5px] font-bold">
+                        NÚMERO INVÁLIDO
+                      </div>
                     ) : (
-                      <div className="mt-0.5 pt-0.5 border-t border-zinc-200 text-[5.5px] text-zinc-400 italic">
-                        {typedDigits[0] ? 'Digitando...' : 'Aguardando voto...'}
+                      <div className="mt-0.5 pt-0.5 border-t border-zinc-200 text-[6px] text-zinc-500">
+                        <div className="flex items-center gap-1 font-semibold truncate">
+                          <span className="text-red-600 font-bold">
+                            {leftCandidate.number}
+                          </span>{' '}
+                          {leftCandidate.name.split(' ')[0]}
+                          <span>•</span>
+                          <span className="text-blue-600 font-bold">
+                            {rightCandidate.number}
+                          </span>{' '}
+                          {rightCandidate.name.split(' ')[0]}
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Foto Oficial na Tela Branca da Urna: SÓ APARECE QUANDO DIGITAR O NÚMERO */}
+                  {/* Foto Oficial na Tela Branca da Urna */}
                   <div className="w-9 h-11 sm:w-10 sm:h-12 rounded border-2 border-zinc-800 overflow-hidden bg-zinc-100 shrink-0 shadow flex items-center justify-center relative mt-0.5">
-                    {hasFullDigits ? (
+                    {matchedCandidate ? (
                       <img
-                        src={candidate.photoUrl}
-                        alt={candidate.name}
+                        src={matchedCandidate.photoUrl}
+                        alt={matchedCandidate.name}
                         className="w-full h-full object-cover object-top animate-fade-in"
                       />
                     ) : (
                       <div className="flex flex-col items-center justify-center text-center p-0.5">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="opacity-30">
-                          <circle cx="12" cy="12" r="10" stroke="#18181b" strokeWidth="2" />
-                          <path d="M12 7 L12 17 M7 12 L17 12" stroke="#18181b" strokeWidth="2" />
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          className="opacity-30"
+                        >
+                          <circle
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="#18181b"
+                            strokeWidth="2"
+                          />
+                          <path
+                            d="M12 7 L12 17 M7 12 L17 12"
+                            stroke="#18181b"
+                            strokeWidth="2"
+                          />
                         </svg>
-                        <span className="text-[5px] text-zinc-400 font-bold uppercase mt-0.5">FOTO</span>
+                        <span className="text-[5px] text-zinc-400 font-bold uppercase mt-0.5">
+                          FOTO
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* Bottom Notice: Piscando quando digita para apertar verde */}
-                <div className="text-[5px] text-zinc-400 border-t border-zinc-200 pt-0.5 uppercase tracking-tighter">
-                  {hasFullDigits ? (
+                {/* Bottom Notice */}
+                <div className="text-[5.5px] sm:text-[6px] text-zinc-500 border-t border-zinc-200 pt-0.5 uppercase tracking-tighter truncate">
+                  {matchedCandidate ? (
                     <span className="text-emerald-700 font-bold animate-pulse">
                       Aperte: <strong>VERDE</strong> para CONFIRMAR
                     </span>
                   ) : (
-                    <span>Digite o número na urna</span>
+                    <span>Digite o número na urna ou envie presentes</span>
                   )}
                 </div>
               </div>
@@ -331,33 +409,29 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
           </div>
 
           {/* Keypad Casing */}
-          <div className="col-span-5 bg-gradient-to-b from-zinc-800 to-zinc-950 rounded-md p-1 border border-zinc-700 shadow-inner flex flex-col justify-between relative overflow-hidden">
+          <div className="col-span-5 bg-gradient-to-b from-zinc-800 to-zinc-950 rounded-lg p-1 border border-zinc-700 shadow-inner flex flex-col justify-between relative overflow-hidden">
             {/* Number grid (1-9 and 0) */}
             <div className="grid grid-cols-3 gap-0.5 mb-0.5">
               {keypadRows.map((row, rIdx) =>
                 row.map((keyVal, cIdx) => {
                   if (!keyVal) {
-                    return <div key={`${rIdx}-${cIdx}`} className="h-3.5 sm:h-4" />;
+                    return (
+                      <div
+                        key={`${rIdx}-${cIdx}`}
+                        className="h-3.5 sm:h-4"
+                      />
+                    );
                   }
                   const isCurrentActive = activeKey === keyVal;
                   return (
                     <button
                       key={keyVal}
                       type="button"
-                      onClick={() => {
-                        playKeyBeep();
-                        setActiveKey(keyVal);
-                        setTimeout(() => setActiveKey(null), 120);
-                        if (!typedDigits[0]) {
-                          setTypedDigits([keyVal, '']);
-                        } else if (!typedDigits[1]) {
-                          setTypedDigits([typedDigits[0], keyVal]);
-                        } else {
-                          setTypedDigits([keyVal, '']);
-                        }
-                      }}
-                      className={`h-3.5 sm:h-4.5 rounded bg-gradient-to-b from-zinc-600 to-zinc-800 text-white font-black text-[7.5px] sm:text-[9px] flex items-center justify-center border border-zinc-500 shadow active:scale-90 cursor-pointer ${
-                        isCurrentActive ? 'bg-amber-400 text-zinc-950 ring-1 ring-amber-300' : ''
+                      onClick={() => handleKeyClick(keyVal)}
+                      className={`h-3.5 sm:h-4.5 rounded bg-gradient-to-b from-zinc-600 to-zinc-800 text-white font-black text-[8px] sm:text-[9.5px] flex items-center justify-center border border-zinc-500 shadow active:scale-90 cursor-pointer transition-transform ${
+                        isCurrentActive
+                          ? 'bg-amber-400 text-zinc-950 ring-1 ring-amber-300 scale-95'
+                          : ''
                       }`}
                     >
                       {keyVal}
@@ -371,45 +445,26 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
             <div className="grid grid-cols-3 gap-0.5 pt-0.5 border-t border-zinc-800">
               <button
                 type="button"
-                onClick={() => {
-                  playKeyBeep();
-                  setTypedDigits(['', '']);
-                }}
-                className="h-4 sm:h-5 rounded bg-white text-zinc-900 font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95"
+                onClick={handleBranco}
+                className={`h-4.5 sm:h-5 rounded bg-white text-zinc-900 font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
+                  activeKey === 'BRANCO' ? 'ring-1 ring-zinc-300' : ''
+                }`}
               >
                 Branco
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  playKeyBeep();
-                  setTypedDigits(['', '']);
-                }}
-                className="h-4 sm:h-5 rounded bg-amber-600 text-white font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95"
+                onClick={handleCorrige}
+                className={`h-4.5 sm:h-5 rounded bg-amber-600 text-white font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
+                  activeKey === 'CORRIGE' ? 'ring-1 ring-amber-300' : ''
+                }`}
               >
                 Corrige
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (typedDigits[0] && typedDigits[1]) {
-                    setIsConfirmFlashing(true);
-                    setShowFimScreen(true);
-                    playUrnaConfirmSound();
-                    onVote(candidate.id, 1, 'Urna Manual', '🗳️');
-                    setTimeout(() => {
-                      setIsConfirmFlashing(false);
-                      setTimeout(() => {
-                        setShowFimScreen(false);
-                        setTypedDigits(['', '']);
-                      }, 2200);
-                    }, 350);
-                  } else {
-                    triggerVoteSequence(candidate.number, 1);
-                    onVote(candidate.id, 1, 'Urna Manual', '🗳️');
-                  }
-                }}
-                className={`h-4 sm:h-5 rounded bg-emerald-600 text-white font-black text-[5px] sm:text-[6.5px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
+                onClick={handleConfirma}
+                className={`h-4.5 sm:h-5 rounded bg-emerald-600 text-white font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
                   isConfirmFlashing || activeKey === 'CONFIRMA'
                     ? 'ring-2 ring-emerald-300 brightness-150 scale-95'
                     : ''
@@ -419,117 +474,68 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
               </button>
             </div>
           </div>
-        </div>
 
-        {/* 3D Cartoon Arm & Pointing Finger that physically presses keys */}
-        <CartoonHand
-          isPressing={isPressingHand}
-          targetKey={handKey}
-          side={candidate.id}
-        />
+          {/* 3D Cartoon Arm & Pointing Finger that physically presses keys */}
+          <CartoonHand
+            isPressing={isPressingHand}
+            targetKey={handKey}
+            side={handSide}
+          />
+        </div>
       </div>
 
-      {/* 4. Wooden Desk Surface */}
-      <div className="w-full h-2.5 sm:h-3 bg-gradient-to-b from-[#8b5a36] via-[#6f4325] to-[#452712] rounded-b-md shadow-md border-t border-[#a66f43]" />
+      {/* 2. Wooden Desk Surface */}
+      <div className="w-full h-2 sm:h-2.5 bg-gradient-to-b from-[#8b5a36] via-[#6f4325] to-[#452712] rounded-b-lg shadow-md border-t border-[#a66f43] flex items-center justify-center" />
 
-      {/* 5. TABELA DE PRESENTES BEM EVIDENTE ABAIXO DA URNA (INTERATIVOS & DESTAQUE MÁXIMO) */}
-      <div
-        className={`w-full mt-1.5 p-1 sm:p-1.5 rounded-2xl bg-slate-950/95 border-2 shadow-2xl flex flex-col gap-1 transition-all ${
-          isRedTheme ? 'border-red-500/80' : 'border-blue-500/80'
-        }`}
-      >
-        <div className="flex items-center justify-between text-[7.5px] sm:text-[8px] font-black uppercase px-0.5 text-slate-300">
-          <span className="text-amber-300">🎁 PRESENTES NO {candidate.number}</span>
-          <span className="text-[6.5px] text-slate-400">TOQUE P/ VOTAR</span>
-        </div>
+      {/* 3. Quick Action Buttons to test or vote for either candidate directly */}
+      <div className="w-full flex items-center justify-between gap-1.5 mt-1 px-0.5">
+        <button
+          type="button"
+          onClick={() => {
+            triggerVoteSequence(
+              leftCandidate,
+              1,
+              leftCandidate.primaryGift.name,
+              leftCandidate.primaryGift.icon
+            );
+            onVote(
+              'left',
+              1,
+              leftCandidate.primaryGift.name,
+              leftCandidate.primaryGift.icon
+            );
+          }}
+          className="flex-1 py-0.5 px-1.5 rounded-lg bg-red-950/70 border border-red-500/60 hover:border-red-400 text-white text-[8px] sm:text-[8.5px] font-bold flex items-center justify-center gap-1 shadow cursor-pointer active:scale-95 transition-all"
+        >
+          <span>{leftCandidate.primaryGift.icon}</span>
+          <span className="truncate">
+            Votar {leftCandidate.number} ({leftCandidate.name.split(' ')[0]})
+          </span>
+        </button>
 
-        {/* Grid de presentes: Presente 1 (+1) ao lado da rosa/sorvete, Presente 2 (+10), Presente 3 (+100) */}
-        <div className="grid grid-cols-3 gap-1 text-center">
-          {/* Presente 1: Rosa ou Sorvete (+1 PONTO) */}
-          <button
-            type="button"
-            onClick={() => {
-              const gift = candidate.primaryGift;
-              triggerVoteSequence(candidate.number, gift.points || 1);
-              onVote(candidate.id, gift.points || 1, gift.name, gift.icon);
-            }}
-            className="group p-1 rounded-xl bg-slate-900 border border-slate-700/80 hover:border-amber-400 flex flex-col items-center justify-between transition-all active:scale-95 shadow cursor-pointer"
-          >
-            <div className="flex items-center justify-center gap-0.5">
-              <span className="text-lg sm:text-xl filter drop-shadow">
-                {candidate.primaryGift.icon || (isRedTheme ? '🌹' : '🍦')}
-              </span>
-              <span className="px-1 py-0.2 rounded-full bg-amber-400 text-zinc-950 font-black font-digital text-[9px] shadow">
-                +1
-              </span>
-            </div>
-            <span className="text-[7.5px] sm:text-[8px] text-slate-300 font-extrabold truncate mt-0.5">
-              {candidate.primaryGift.name || (isRedTheme ? 'Rosa' : 'Sorvete')}
-            </span>
-            <span className="text-[8px] sm:text-[8.5px] font-black text-amber-300 font-digital leading-none">
-              +1 PONTO
-            </span>
-          </button>
-
-          {/* Presente 2: Coração ou Donut (+10 PONTOS) */}
-          <button
-            type="button"
-            onClick={() => {
-              const gift = candidate.bonusGifts?.[0] || { name: 'Combo', icon: '🍩', points: 10 };
-              triggerVoteSequence(candidate.number, gift.points || 10);
-              onVote(candidate.id, gift.points || 10, gift.name, gift.icon);
-            }}
-            className="group p-1 rounded-xl bg-slate-900 border border-emerald-500/60 hover:border-emerald-400 flex flex-col items-center justify-between transition-all active:scale-95 shadow cursor-pointer"
-          >
-            <div className="flex items-center justify-center gap-0.5">
-              <span className="text-lg sm:text-xl filter drop-shadow">
-                {candidate.bonusGifts?.[0]?.icon || (isRedTheme ? '💖' : '🍩')}
-              </span>
-              <span className="px-1 py-0.2 rounded-full bg-emerald-500 text-white font-black font-digital text-[8.5px] shadow">
-                +10
-              </span>
-            </div>
-            <span className="text-[7.5px] sm:text-[8px] text-emerald-300 font-extrabold truncate mt-0.5">
-              {candidate.bonusGifts?.[0]?.name || (isRedTheme ? 'Coração' : 'Donut')}
-            </span>
-            <span className="text-[8px] sm:text-[8.5px] font-black text-emerald-400 font-digital leading-none">
-              +10 PONTOS
-            </span>
-          </button>
-
-          {/* Presente 3: Galáxia ou Leão (+100 PONTOS MEGA) */}
-          <button
-            type="button"
-            onClick={() => {
-              const gift =
-                candidate.bonusGifts?.[2] ||
-                candidate.bonusGifts?.[1] ||
-                { name: 'Mega Bônus', icon: isRedTheme ? '🌌' : '🦁', points: 100 };
-              triggerVoteSequence(candidate.number, gift.points || 100);
-              onVote(candidate.id, gift.points || 100, gift.name, gift.icon);
-            }}
-            className="group p-1 rounded-xl bg-gradient-to-b from-amber-950/60 to-slate-900 border-2 border-amber-400/90 hover:border-yellow-300 flex flex-col items-center justify-between transition-all active:scale-95 shadow-md shadow-amber-500/30 cursor-pointer animate-pulse"
-          >
-            <div className="flex items-center justify-center gap-0.5">
-              <span className="text-lg sm:text-xl filter drop-shadow">
-                {candidate.bonusGifts?.[2]?.icon ||
-                  candidate.bonusGifts?.[1]?.icon ||
-                  (isRedTheme ? '🌌' : '🦁')}
-              </span>
-              <span className="px-1 py-0.2 rounded-full bg-yellow-400 text-zinc-950 font-black font-digital text-[8px] shadow">
-                +100
-              </span>
-            </div>
-            <span className="text-[7.5px] sm:text-[8px] text-yellow-300 font-black truncate mt-0.5">
-              {candidate.bonusGifts?.[2]?.name ||
-                candidate.bonusGifts?.[1]?.name ||
-                (isRedTheme ? 'Galáxia' : 'Leão')}
-            </span>
-            <span className="text-[8px] sm:text-[8.5px] font-black text-yellow-300 font-digital leading-none">
-              +100 PONTOS
-            </span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            triggerVoteSequence(
+              rightCandidate,
+              1,
+              rightCandidate.primaryGift.name,
+              rightCandidate.primaryGift.icon
+            );
+            onVote(
+              'right',
+              1,
+              rightCandidate.primaryGift.name,
+              rightCandidate.primaryGift.icon
+            );
+          }}
+          className="flex-1 py-0.5 px-1.5 rounded-lg bg-blue-950/70 border border-blue-500/60 hover:border-blue-400 text-white text-[8px] sm:text-[8.5px] font-bold flex items-center justify-center gap-1 shadow cursor-pointer active:scale-95 transition-all"
+        >
+          <span>{rightCandidate.primaryGift.icon}</span>
+          <span className="truncate">
+            Votar {rightCandidate.number} ({rightCandidate.name.split(' ')[0]})
+          </span>
+        </button>
       </div>
     </div>
   );
