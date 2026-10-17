@@ -16,6 +16,7 @@ interface CandidateBoxProps {
   lastVoteUser?: string;
   lastVoteText?: string;
   side: 'left' | 'right';
+  isLiveOnly?: boolean;
 }
 
 export const CandidateBox: React.FC<CandidateBoxProps> = ({
@@ -28,6 +29,7 @@ export const CandidateBox: React.FC<CandidateBoxProps> = ({
   lastVoteUser,
   lastVoteText,
   side,
+  isLiveOnly = false,
 }) => {
   const isRedTheme = side === 'left';
   const shortName = candidate.name.split(' ')[0];
@@ -126,11 +128,13 @@ export const CandidateBox: React.FC<CandidateBoxProps> = ({
           </div>
         </div>
 
-        {/* 3. TIPOS DE PRESENTE BEM VISÍVEL (Clique para votar e animar a Urna) */}
+        {/* 3. TIPOS DE PRESENTE BEM VISÍVEL (Clique para votar e animar a Urna em modo ADM) */}
         <div className="pt-1 border-t border-slate-800/80">
           <div className="flex items-center justify-between text-[7px] text-amber-300 font-black uppercase mb-0.5 px-0.5">
             <span>🎁 PRESENTES ({candidate.number}):</span>
-            <span className="text-slate-400 text-[6.5px]">TOQUE P/ VOTAR</span>
+            <span className={isLiveOnly ? "text-emerald-400 text-[6.5px] font-bold" : "text-slate-400 text-[6.5px]"}>
+              {isLiveOnly ? 'ENVIE NA LIVE' : 'TOQUE P/ TESTAR'}
+            </span>
           </div>
 
           <div className="grid grid-cols-3 gap-1">
@@ -138,23 +142,33 @@ export const CandidateBox: React.FC<CandidateBoxProps> = ({
               <button
                 key={gift.id}
                 type="button"
-                onClick={() =>
-                  onVote(
-                    side,
-                    gift.points,
-                    `${gift.name} (${shortName})`,
-                    gift.icon
-                  )
+                disabled={isLiveOnly}
+                onClick={
+                  !isLiveOnly
+                    ? () =>
+                        onVote(
+                          side,
+                          gift.points,
+                          `${gift.name} (${shortName})`,
+                          gift.icon
+                        )
+                    : undefined
                 }
-                title={`Enviar ${gift.name} (+${gift.points} pontos)`}
-                className={`py-1 px-0.5 rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer active:scale-90 shadow-sm ${
+                title={
+                  isLiveOnly
+                    ? `Envie ${gift.name} no TikTok LIVE para votar (+${gift.points} pts)`
+                    : `Enviar ${gift.name} (+${gift.points} pontos)`
+                }
+                className={`py-1 px-0.5 rounded-xl border flex flex-col items-center justify-center transition-all shadow-sm ${
+                  !isLiveOnly ? 'cursor-pointer active:scale-90 hover:brightness-110' : 'cursor-default opacity-95'
+                } ${
                   gift.points >= 100
-                    ? 'bg-gradient-to-b from-amber-950/70 to-slate-900 border-amber-400/80 hover:border-amber-300'
+                    ? 'bg-gradient-to-b from-amber-950/70 to-slate-900 border-amber-400/80'
                     : gift.points >= 10
-                    ? 'bg-emerald-950/40 border-emerald-500/50 hover:border-emerald-400'
+                    ? 'bg-emerald-950/40 border-emerald-500/50'
                     : isRedTheme
-                    ? 'bg-red-950/40 border-red-500/40 hover:border-red-400'
-                    : 'bg-blue-950/40 border-blue-500/40 hover:border-blue-400'
+                    ? 'bg-red-950/40 border-red-500/40'
+                    : 'bg-blue-950/40 border-blue-500/40'
                 }`}
               >
                 <span className="text-base sm:text-lg filter drop-shadow leading-none">

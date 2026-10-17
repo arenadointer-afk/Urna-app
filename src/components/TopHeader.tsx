@@ -10,6 +10,7 @@ interface TopHeaderProps {
   onOpenAdmin: () => void;
   victoryScore: VictoryScore;
   roundNumber: number;
+  isLiveOnly?: boolean;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -19,6 +20,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenAdmin,
   victoryScore,
   roundNumber,
+  isLiveOnly = false,
 }) => {
   // Format timer 02:05
   const minutes = Math.floor(timeLeft / 60);
@@ -27,11 +29,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <header className="w-full max-w-md flex flex-col items-center select-none pt-1 shrink-0 px-2 z-20">
-      {/* 1. COMPACT GOLDEN TITLE (Secret tap opens Admin) */}
+      {/* 1. COMPACT GOLDEN TITLE (Secret tap opens Admin only in admin mode) */}
       <div
-        onClick={onOpenAdmin}
-        title="Toque para Painel Admin"
-        className="flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-transform mb-1"
+        onClick={!isLiveOnly ? onOpenAdmin : undefined}
+        title={!isLiveOnly ? "Toque para Painel Admin" : undefined}
+        className={`flex items-center justify-center gap-1.5 ${!isLiveOnly ? 'cursor-pointer active:scale-95' : 'cursor-default'} transition-transform mb-1`}
       >
         <span className="text-sm">🗳️</span>
         <h1

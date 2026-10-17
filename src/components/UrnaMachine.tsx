@@ -18,6 +18,7 @@ export interface UrnaMachineProps {
   lastVoteText?: string;
   lastVoteGiftIcon?: string;
   lastVoteAmount?: number;
+  isInteractive?: boolean;
 }
 
 export const UrnaMachine: React.FC<UrnaMachineProps> = ({
@@ -29,6 +30,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   lastVoteText,
   lastVoteGiftIcon,
   lastVoteAmount,
+  isInteractive = true,
 }) => {
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [isPressingHand, setIsPressingHand] = useState(false);
@@ -43,6 +45,17 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
     giftText?: string;
     giftIcon?: string;
   } | null>(null);
+
+  const timersRef = React.useRef<any[]>([]);
+
+  const clearAllTimers = () => {
+    timersRef.current.forEach((t) => clearTimeout(t));
+    timersRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => clearAllTimers();
+  }, []);
 
   // Trigger vote sequence with animated finger & TSE audio when vote event fires
   useEffect(() => {
@@ -64,6 +77,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
     giftText?: string,
     giftIcon?: string
   ) => {
+    clearAllTimers();
     const digits = targetCandidate.number.split('');
     const d1 = digits[0] || '1';
     const d2 = digits[1] || '3';
@@ -74,21 +88,21 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
     setTypedDigits(['', '']);
 
     // Step 1: Finger presses first digit
-    setTimeout(() => {
+    const t1 = setTimeout(() => {
       setTypedDigits([d1, '']);
       setHandKey(d1);
       setActiveKey(d1);
       playKeyBeep();
 
       // Step 2: Finger presses second digit -> Candidate Photo & Name reveal on white screen!
-      setTimeout(() => {
+      const t2 = setTimeout(() => {
         setTypedDigits([d1, d2]);
         setHandKey(d2);
         setActiveKey(d2);
         playKeyBeep();
 
         // Step 3: Finger swoops to green CONFIRMA key and presses it!
-        setTimeout(() => {
+        const t3 = setTimeout(() => {
           setHandKey('CONFIRMA');
           setActiveKey('CONFIRMA');
           setIsConfirmFlashing(true);
@@ -102,22 +116,27 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
           playUrnaConfirmSound();
 
           // Step 4: Release finger
-          setTimeout(() => {
+          const t4 = setTimeout(() => {
             setIsPressingHand(false);
             setHandKey(null);
             setActiveKey(null);
             setIsConfirmFlashing(false);
 
             // Step 5: After FIM screen, return to clean waiting state
-            setTimeout(() => {
+            const t5 = setTimeout(() => {
               setShowFimScreen(false);
               setTypedDigits(['', '']);
               setConfirmedData(null);
-            }, 2000);
-          }, 320);
-        }, 240);
-      }, 240);
-    }, 100);
+            }, 1200);
+            timersRef.current.push(t5);
+          }, 240);
+          timersRef.current.push(t4);
+        }, 200);
+        timersRef.current.push(t3);
+      }, 200);
+      timersRef.current.push(t2);
+    }, 60);
+    timersRef.current.push(t1);
   };
 
   const currentEnteredNumber = typedDigits.join('');
@@ -138,6 +157,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   ];
 
   const handleKeyClick = (keyVal: string) => {
+    if (!isInteractive) return;
     playKeyBeep();
     setActiveKey(keyVal);
     setTimeout(() => setActiveKey(null), 120);
@@ -152,6 +172,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   };
 
   const handleCorrige = () => {
+    if (!isInteractive) return;
     playKeyBeep();
     setActiveKey('CORRIGE');
     setTimeout(() => setActiveKey(null), 120);
@@ -161,6 +182,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   };
 
   const handleBranco = () => {
+    if (!isInteractive) return;
     playKeyBeep();
     setActiveKey('BRANCO');
     setTimeout(() => setActiveKey(null), 120);
@@ -168,6 +190,7 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
   };
 
   const handleConfirma = () => {
+    if (!isInteractive) return;
     setActiveKey('CONFIRMA');
     setTimeout(() => setActiveKey(null), 150);
 
@@ -428,7 +451,9 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
                       key={keyVal}
                       type="button"
                       onClick={() => handleKeyClick(keyVal)}
-                      className={`h-3.5 sm:h-4.5 rounded bg-gradient-to-b from-zinc-600 to-zinc-800 text-white font-black text-[8px] sm:text-[9.5px] flex items-center justify-center border border-zinc-500 shadow active:scale-90 cursor-pointer transition-transform ${
+                      className={`h-3.5 sm:h-4.5 rounded bg-gradient-to-b from-zinc-600 to-zinc-800 text-white font-black text-[8px] sm:text-[9.5px] flex items-center justify-center border border-zinc-500 shadow transition-transform ${
+                        isInteractive ? 'cursor-pointer active:scale-90' : 'cursor-default'
+                      } ${
                         isCurrentActive
                           ? 'bg-amber-400 text-zinc-950 ring-1 ring-amber-300 scale-95'
                           : ''
@@ -446,7 +471,9 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
               <button
                 type="button"
                 onClick={handleBranco}
-                className={`h-4.5 sm:h-5 rounded bg-white text-zinc-900 font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
+                className={`h-4.5 sm:h-5 rounded bg-white text-zinc-900 font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow ${
+                  isInteractive ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                } ${
                   activeKey === 'BRANCO' ? 'ring-1 ring-zinc-300' : ''
                 }`}
               >
@@ -455,7 +482,9 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
               <button
                 type="button"
                 onClick={handleCorrige}
-                className={`h-4.5 sm:h-5 rounded bg-amber-600 text-white font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
+                className={`h-4.5 sm:h-5 rounded bg-amber-600 text-white font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow ${
+                  isInteractive ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                } ${
                   activeKey === 'CORRIGE' ? 'ring-1 ring-amber-300' : ''
                 }`}
               >
@@ -464,7 +493,9 @@ export const UrnaMachine: React.FC<UrnaMachineProps> = ({
               <button
                 type="button"
                 onClick={handleConfirma}
-                className={`h-4.5 sm:h-5 rounded bg-emerald-600 text-white font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow cursor-pointer active:scale-95 ${
+                className={`h-4.5 sm:h-5 rounded bg-emerald-600 text-white font-black text-[5px] sm:text-[6px] uppercase tracking-tighter flex items-center justify-center shadow ${
+                  isInteractive ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                } ${
                   isConfirmFlashing || activeKey === 'CONFIRMA'
                     ? 'ring-2 ring-emerald-300 brightness-150 scale-95'
                     : ''

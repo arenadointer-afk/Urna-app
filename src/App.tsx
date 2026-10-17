@@ -230,129 +230,200 @@ export default function App() {
   const lastServerTickRef = useRef<number>(0);
   const lastResetTimestampRef = useRef<number>(0);
 
-  // Sincroniza estado vindo do servidor e grava no disco / localStorage
-  // Protegido contra sobreposição acidental de timeLeft e zeramento prematuro de pontos
-  const applyServerState = useCallback((state: any, options?: { allowTimeSync?: boolean; isAuthoritativeReset?: boolean }) => {
-    if (!state) return;
+  // Fila sequencial de presentes para exibição harmoniosa na urna eletrônica (sem sobreposição de sons/telas)
+  interface QueuedGiftAnimation {
+    side: 'left' | 'right';
+    amount: number;
+    giftName?: string;
+    giftIcon: string;
+    username: string;
+    actionText: string;
+    isEpic: boolean;
+    candidateNumber: string;
+    candidateName: string;
+  }
+  const giftQueueRef = useRef<QueuedGiftAnimation[]>([]);
+  const isProcessingQueueRef = useRef<boolean>(false);
 
-    // Se o estado vindo da nuvem/servidor for mais antigo que o reset efetuado pelo ADM, ignora
-    if (state.updatedAt && state.updatedAt < lastResetTimestampRef.current) {
-      return;
-    }
-    if (state.leftCandidate) {
-      setLeftCandidate(state.leftCandidate);
-      saveCandidate('left', state.leftCandidate);
-    }
-    if (state.rightCandidate) {
-      setRightCandidate(state.rightCandidate);
-      saveCandidate('right', state.rightCandidate);
-    }
-    if (typeof state.roundNumber === 'number') {
-      setRoundNumber(state.roundNumber);
-      saveRoundNumber(state.roundNumber);
-    }
-    if (typeof state.roundDuration === 'number') {
-      setRoundDuration(state.roundDuration);
-      saveRoundDuration(state.roundDuration);
-    }
-    // SÓ atualiza timeLeft se for ação explícita (início, reset, ou add time), NUNCA por snapshots passivos de presentes!
-    if (options?.allowTimeSync && typeof state.timeLeft === 'number') {
-      setTimeLeft(state.timeLeft);
-      saveTimeLeft(state.timeLeft);
-    }
-    if (typeof state.isPaused === 'boolean') {
-      setIsPaused(state.isPaused);
-      saveIsPaused(state.isPaused);
-    }
-    // Proteção contra sobrescrita acidental por servidor reiniciado ou vazio:
-    // Se o servidor acabou de acordar (pontos 0) e NÃO for um reset manual do streamer,
-    // mas o cliente local já possui pontos ou placar ativos de uma live em andamento:
-    const localPts = getSavedPoints();
-    const localScore = getSavedVictoryScore();
-    const hasLocalActivePoints = localPts.leftPoints > 0 || localPts.rightPoints > 0;
-    const hasLocalActiveScore = localScore.left > 0 || localScore.right > 0;
-    const incomingIsZero = (state.leftPoints === 0 && state.rightPoints === 0);
-
-    if (!options?.isAuthoritativeReset && incomingIsZero && (hasLocalActivePoints || hasLocalActiveScore)) {
-      console.log('[Sync] Servidor reiniciou limpo. Mantendo e sincronizando estado ativo local com o servidor.');
-      fetch('/api/state/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leftPoints: localPts.leftPoints,
-          rightPoints: localPts.rightPoints,
-          victoryScore: localScore,
-          roundNumber: getSavedRoundNumber(1),
-          leftCandidate: getSavedCandidate('left'),
-          rightCandidate: getSavedCandidate('right'),
-        }),
-      }).catch(() => {});
+  const triggerNextQueuedGift = useCallback(() => {
+    if (giftQueueRef.current.length === 0) {
+      isProcessingQueueRef.current = false;
       return;
     }
 
-    if (typeof state.leftPoints === 'number') {
-      const val = state.leftPoints;
-      pointsRef.current.left = val;
-      setLeftPoints(val);
-    }
-    if (typeof state.rightPoints === 'number') {
-      const val = state.rightPoints;
-      pointsRef.current.right = val;
-      setRightPoints(val);
-    }
-    if (typeof state.leftGiftsCount === 'number') {
-      const val = state.leftGiftsCount;
-      pointsRef.current.leftGifts = val;
-      setLeftGiftsCount(val);
-    }
-    if (typeof state.rightGiftsCount === 'number') {
-      const val = state.rightGiftsCount;
-      pointsRef.current.rightGifts = val;
-      setRightGiftsCount(val);
+    isProcessingQueueRef.current = true;
+    const item = giftQueueRef.current.shift()!;
+
+    playVoteSound();
+    setLastVoteTimestamp(Date.now());
+    setLastVoteSide(item.side);
+    setLastVoteActionText(item.actionText);
+    setLastVoteGiftIcon(item.giftIcon);
+    setLastVoteAmount(item.amount);
+    spawnReaction(item.giftIcon, item.side);
+
+    if (item.side === 'left') {
+      setLastLeftVoteTimestamp(Date.now());
+      setLastLeftUser(item.username);
+      setLastLeftText(item.actionText);
+    } else {
+      setLastRightVoteTimestamp(Date.now());
+      setLastRightUser(item.username);
+      setLastRightText(item.actionText);
     }
 
-    // Persiste imediatamente no localStorage para não perder em F5
-    if (typeof state.leftPoints === 'number' || typeof state.rightPoints === 'number') {
-      savePoints({
-        leftPoints: pointsRef.current.left,
-        rightPoints: pointsRef.current.right,
-        leftGifts: pointsRef.current.leftGifts,
-        rightGifts: pointsRef.current.rightGifts,
+    if (item.isEpic || item.amount >= 10) {
+      setEpicGift({
+        id: Date.now(),
+        username: item.username,
+        giftName: item.giftName || 'Super Presente',
+        giftIcon: item.giftIcon,
+        points: item.amount,
+        candidateNumber: item.candidateNumber,
+        candidateName: item.candidateName,
+        side: item.side,
       });
     }
 
-    if (state.victoryScore) {
-      if (options?.isAuthoritativeReset || state.victoryScore.left > 0 || state.victoryScore.right > 0 || (!localScore.left && !localScore.right)) {
+    // Delay harmonioso: cerca de 850ms para permitir animação completa de digitação e confirmação na Urna
+    const queueLen = giftQueueRef.current.length;
+    const delay = queueLen > 8 ? 450 : queueLen > 3 ? 650 : 850;
+    setTimeout(() => {
+      triggerNextQueuedGift();
+    }, delay);
+  }, [spawnReaction]);
+
+  const enqueueGift = useCallback(
+    (item: QueuedGiftAnimation) => {
+      giftQueueRef.current.push(item);
+      if (!isProcessingQueueRef.current) {
+        triggerNextQueuedGift();
+      }
+    },
+    [triggerNextQueuedGift]
+  );
+
+  // Sincroniza estado vindo do servidor e grava no disco / localStorage
+  // Protegido contra sobreposição acidental de timeLeft, zeramento prematuro e reversão de resets
+  const applyServerState = useCallback(
+    (state: any, options?: { allowTimeSync?: boolean; isAuthoritativeReset?: boolean }) => {
+      if (!state) return;
+
+      // Se o estado vindo da nuvem/servidor for mais antigo que o reset efetuado pelo ADM, ignora
+      if (state.updatedAt && lastResetTimestampRef.current && state.updatedAt < lastResetTimestampRef.current) {
+        return;
+      }
+
+      if (state.leftCandidate) {
+        setLeftCandidate(state.leftCandidate);
+        saveCandidate('left', state.leftCandidate);
+      }
+      if (state.rightCandidate) {
+        setRightCandidate(state.rightCandidate);
+        saveCandidate('right', state.rightCandidate);
+      }
+      if (typeof state.roundNumber === 'number') {
+        setRoundNumber(state.roundNumber);
+        saveRoundNumber(state.roundNumber);
+      }
+      if (typeof state.roundDuration === 'number') {
+        setRoundDuration(state.roundDuration);
+        saveRoundDuration(state.roundDuration);
+      }
+      // SÓ atualiza timeLeft se for ação explícita (início, reset, ou add time), NUNCA por snapshots passivos de presentes!
+      if (options?.allowTimeSync && typeof state.timeLeft === 'number') {
+        setTimeLeft(state.timeLeft);
+        saveTimeLeft(state.timeLeft);
+      }
+      if (typeof state.isPaused === 'boolean') {
+        setIsPaused(state.isPaused);
+        saveIsPaused(state.isPaused);
+      }
+
+      // Pontos: se for reset de fim de rodada, comando explícito ou quando ambos zeraram
+      const isExplicitReset =
+        options?.isAuthoritativeReset ||
+        (typeof state.leftPoints === 'number' &&
+          state.leftPoints === 0 &&
+          typeof state.rightPoints === 'number' &&
+          state.rightPoints === 0 &&
+          !state.isRoundOver);
+
+      if (isExplicitReset) {
+        const nextL = typeof state.leftPoints === 'number' ? state.leftPoints : 0;
+        const nextR = typeof state.rightPoints === 'number' ? state.rightPoints : 0;
+        pointsRef.current.left = nextL;
+        pointsRef.current.right = nextR;
+        pointsRef.current.leftGifts = state.leftGiftsCount || 0;
+        pointsRef.current.rightGifts = state.rightGiftsCount || 0;
+        setLeftPoints(nextL);
+        setRightPoints(nextR);
+        setLeftGiftsCount(pointsRef.current.leftGifts);
+        setRightGiftsCount(pointsRef.current.rightGifts);
+        savePoints({
+          leftPoints: nextL,
+          rightPoints: nextR,
+          leftGifts: pointsRef.current.leftGifts,
+          rightGifts: pointsRef.current.rightGifts,
+        });
+        if (typeof state.isRoundOver === 'boolean') {
+          setIsRoundOver(state.isRoundOver);
+        }
+        if (state.winner !== undefined) {
+          setWinner(state.winner);
+        }
+      } else {
+        // Durante a rodada ativa, os pontos NUNCA voltam para trás (imune a pacotes fora de ordem ou race conditions)
+        if (typeof state.leftPoints === 'number' && state.leftPoints > pointsRef.current.left) {
+          pointsRef.current.left = state.leftPoints;
+          setLeftPoints(state.leftPoints);
+        }
+        if (typeof state.rightPoints === 'number' && state.rightPoints > pointsRef.current.right) {
+          pointsRef.current.right = state.rightPoints;
+          setRightPoints(state.rightPoints);
+        }
+        if (typeof state.leftGiftsCount === 'number' && state.leftGiftsCount > pointsRef.current.leftGifts) {
+          pointsRef.current.leftGifts = state.leftGiftsCount;
+          setLeftGiftsCount(state.leftGiftsCount);
+        }
+        if (typeof state.rightGiftsCount === 'number' && state.rightGiftsCount > pointsRef.current.rightGifts) {
+          pointsRef.current.rightGifts = state.rightGiftsCount;
+          setRightGiftsCount(state.rightGiftsCount);
+        }
+
+        savePoints({
+          leftPoints: pointsRef.current.left,
+          rightPoints: pointsRef.current.right,
+          leftGifts: pointsRef.current.leftGifts,
+          rightGifts: pointsRef.current.rightGifts,
+        });
+      }
+
+      if (state.victoryScore && typeof state.victoryScore.left === 'number' && typeof state.victoryScore.right === 'number') {
         setVictoryScore(state.victoryScore);
         saveVictoryScore(state.victoryScore);
       }
-    }
-    if (state.lastLeftUser) setLastLeftUser(state.lastLeftUser);
-    if (state.lastLeftText) setLastLeftText(state.lastLeftText);
-    if (state.lastRightUser) setLastRightUser(state.lastRightUser);
-    if (state.lastRightText) setLastRightText(state.lastRightText);
-    if (options?.isAuthoritativeReset && typeof state.isRoundOver === 'boolean') {
-      setIsRoundOver(state.isRoundOver);
-    }
-    if (options?.isAuthoritativeReset && state.winner !== undefined) {
-      setWinner(state.winner);
-    }
-    if (typeof state.resetCountdown === 'number') setResetCountdown(state.resetCountdown);
-    if (Array.isArray(state.chatMessages)) setChatMessages(state.chatMessages);
-    if (state.tiktokUsername) {
-      setTiktokUsername(state.tiktokUsername);
-      saveTikTokConfig({ username: state.tiktokUsername, autoConnect: true });
-    }
-    if (state.musicTrack) {
-      setMusicTrack(state.musicTrack);
-      saveSelectedMusicTrack(state.musicTrack);
-      playMusicTrack(state.musicTrack);
-    }
-    if (state.bannerSettings) {
-      setBannerSettings(state.bannerSettings);
-      saveBannerSettings(state.bannerSettings);
-    }
-  }, []);
+      if (state.lastLeftUser) setLastLeftUser(state.lastLeftUser);
+      if (state.lastLeftText) setLastLeftText(state.lastLeftText);
+      if (state.lastRightUser) setLastRightUser(state.lastRightUser);
+      if (state.lastRightText) setLastRightText(state.lastRightText);
+      if (typeof state.resetCountdown === 'number') setResetCountdown(state.resetCountdown);
+      if (Array.isArray(state.chatMessages)) setChatMessages(state.chatMessages);
+      if (state.tiktokUsername) {
+        setTiktokUsername(state.tiktokUsername);
+        saveTikTokConfig({ username: state.tiktokUsername, autoConnect: true });
+      }
+      if (state.musicTrack) {
+        setMusicTrack(state.musicTrack);
+        saveSelectedMusicTrack(state.musicTrack);
+      }
+      if (state.bannerSettings) {
+        setBannerSettings(state.bannerSettings);
+        saveBannerSettings(state.bannerSettings);
+      }
+    },
+    []
+  );
 
   // 1. Escuta mudanças em tempo real entre abas e janelas no mesmo navegador (BroadcastChannel - 0ms)
   useEffect(() => {
@@ -457,13 +528,14 @@ export default function App() {
             return prev - 1;
           }
 
-          // Inicia próxima rodada automaticamente!
-          setRoundNumber((r) => {
-            const nextRound = r + 1;
-            saveRoundNumber(nextRound);
-            broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: nextRound });
-            return nextRound;
-          });
+          // Inicia próxima rodada automaticamente com placar dos candidatos ZERADO!
+          const now = Date.now();
+          lastResetTimestampRef.current = now;
+          pointsRef.current.left = 0;
+          pointsRef.current.right = 0;
+          pointsRef.current.leftGifts = 0;
+          pointsRef.current.rightGifts = 0;
+
           setLeftPoints(0);
           setRightPoints(0);
           setLeftGiftsCount(0);
@@ -476,6 +548,31 @@ export default function App() {
           saveTimeLeft(roundDuration);
           savePoints({ leftPoints: 0, rightPoints: 0, leftGifts: 0, rightGifts: 0 });
           broadcastSync({ type: 'RESET_ROUND' });
+
+          setRoundNumber((r) => {
+            const nextRound = r + 1;
+            saveRoundNumber(nextRound);
+            broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: nextRound });
+
+            saveGameStateToFirestore({
+              leftPoints: 0,
+              rightPoints: 0,
+              leftGiftsCount: 0,
+              rightGiftsCount: 0,
+              leftCommentProgress: 0,
+              rightCommentProgress: 0,
+              isRoundOver: false,
+              winner: 'none',
+              timeLeft: roundDuration,
+              roundNumber: nextRound,
+              resetCountdown: 5,
+              updatedAt: now,
+            }).catch(() => {});
+
+            return nextRound;
+          });
+
+          fetch('/api/reset-round', { method: 'POST' }).catch(() => {});
           return 5;
         });
       }
@@ -514,8 +611,6 @@ export default function App() {
       }
 
       if (event.type === 'vote' || event.type === 'gift') {
-        playVoteSound();
-        spawnReaction(event.giftIcon || '🌹', event.side || 'left');
         const amount = Number(event.amount) || 1;
         const isGift = event.type === 'gift' || Boolean(event.giftName);
         const actionText = isGift
@@ -523,34 +618,20 @@ export default function App() {
           : `${event.giftName || 'Voto'} • +${amount} ponto`;
 
         const voteSide = (event.side === 'right' ? 'right' : 'left') as 'left' | 'right';
-        setLastVoteTimestamp(Date.now());
-        setLastVoteSide(voteSide);
-        setLastVoteActionText(actionText);
-        setLastVoteGiftIcon(event.giftIcon || '🎁');
-        setLastVoteAmount(amount);
+        const targetNumber = voteSide === 'left' ? leftCandidate.number : rightCandidate.number;
+        const targetName = voteSide === 'left' ? leftCandidate.name : rightCandidate.name;
 
-        if (event.side === 'left') {
-          setLastLeftVoteTimestamp(Date.now());
-          if (event.username) setLastLeftUser(event.username);
-          setLastLeftText(actionText);
-        } else {
-          setLastRightVoteTimestamp(Date.now());
-          if (event.username) setLastRightUser(event.username);
-          setLastRightText(actionText);
-        }
-
-        if (event.isEpic || amount >= 10) {
-          setEpicGift({
-            id: Date.now(),
-            username: event.username || '@fa_live',
-            giftName: event.giftName || 'Super Presente',
-            giftIcon: event.giftIcon || '🎁',
-            points: amount,
-            candidateNumber: event.side === 'left' ? leftCandidate.number : rightCandidate.number,
-            candidateName: event.side === 'left' ? leftCandidate.name : rightCandidate.name,
-            side: event.side,
-          });
-        }
+        enqueueGift({
+          side: voteSide,
+          amount,
+          giftName: event.giftName,
+          giftIcon: event.giftIcon || '🎁',
+          username: event.username || '@fa_live',
+          actionText,
+          isEpic: Boolean(event.isEpic || amount >= 10),
+          candidateNumber: targetNumber,
+          candidateName: targetName,
+        });
       } else if (event.type === 'chat') {
         if (event.comment) {
           addTiktokLog('chat', `[Chat] ${event.username || '@espectador'}: ${event.comment}`, event.username);
@@ -572,7 +653,7 @@ export default function App() {
       unsubscribeEvents();
       unsubscribeChat();
     };
-  }, [applyServerState, spawnReaction, leftCandidate.number, leftCandidate.name, rightCandidate.number, rightCandidate.name, addTiktokLog]);
+  }, [applyServerState, enqueueGift, leftCandidate.number, leftCandidate.name, rightCandidate.number, rightCandidate.name, addTiktokLog]);
 
   // 4. Conexão SSE para sincronização em tempo real entre todas as telas, OBS e público
   useEffect(() => {
@@ -600,33 +681,40 @@ export default function App() {
             setIsPaused(data.isPaused);
             setIsRoundOver(data.isRoundOver);
             setResetCountdown(data.resetCountdown);
-            if (typeof data.roundNumber === 'number') setRoundNumber(data.roundNumber);
+            // Só sincroniza roundNumber se não tiver havido alteração manual recente pelo ADM nos últimos 4 segundos
+            if (
+              typeof data.roundNumber === 'number' &&
+              (!lastResetTimestampRef.current || Date.now() - lastResetTimestampRef.current > 4000)
+            ) {
+              setRoundNumber(data.roundNumber);
+            }
           } else if (data.type === 'VOTE_TRIGGER') {
             applyServerState(data.state);
-            playVoteSound();
-            spawnReaction(data.giftIcon, data.side);
             const side = (data.side === 'right' ? 'right' : 'left') as 'left' | 'right';
-            const actionText = data.giftName ? `${data.giftName} para ${side === 'left' ? leftCandidate.name.split(' ')[0] : rightCandidate.name.split(' ')[0]}` : `Voto no ${side === 'left' ? leftCandidate.number : rightCandidate.number}`;
-            setLastVoteTimestamp(Date.now());
-            setLastVoteSide(side);
-            setLastVoteActionText(actionText);
-            setLastVoteGiftIcon(data.giftIcon || '🎁');
-            setLastVoteAmount(data.amount || 1);
-            if (data.side === 'left') {
-              setLastLeftVoteTimestamp(Date.now());
-            } else {
-              setLastRightVoteTimestamp(Date.now());
-            }
-            if (data.isEpic) {
-              setEpicGift({
-                id: Date.now(),
-                username: data.username,
+            const actionText = data.giftName
+              ? `${data.giftName} para ${side === 'left' ? leftCandidate.name.split(' ')[0] : rightCandidate.name.split(' ')[0]}`
+              : `Voto no ${side === 'left' ? leftCandidate.number : rightCandidate.number}`;
+            const targetNumber =
+              side === 'left'
+                ? data.state?.leftCandidate?.number || leftCandidate.number
+                : data.state?.rightCandidate?.number || rightCandidate.number;
+            const targetName =
+              side === 'left'
+                ? data.state?.leftCandidate?.name || leftCandidate.name
+                : data.state?.rightCandidate?.name || rightCandidate.name;
+
+            // Se o evento não for do próprio cliente, enfileira a animação sequencial na urna
+            if (!data.clientId || data.clientId !== clientId) {
+              enqueueGift({
+                side,
+                amount: data.amount || 1,
                 giftName: data.giftName,
-                giftIcon: data.giftIcon,
-                points: data.amount,
-                candidateNumber: data.side === 'left' ? data.state.leftCandidate.number : data.state.rightCandidate.number,
-                candidateName: data.side === 'left' ? data.state.leftCandidate.name : data.state.rightCandidate.name,
-                side: data.side,
+                giftIcon: data.giftIcon || '🎁',
+                username: data.username || '@fa_live',
+                actionText,
+                isEpic: Boolean(data.isEpic || (data.amount && data.amount >= 10)),
+                candidateNumber: targetNumber,
+                candidateName: targetName,
               });
             }
           } else if (data.type === 'CHAT_TRIGGER') {
@@ -639,7 +727,7 @@ export default function App() {
           } else if (data.type === 'ROUND_RESTART') {
             setIsRoundOver(false);
             setWinner(null);
-            applyServerState(data.state);
+            applyServerState(data.state, { isAuthoritativeReset: true });
           } else if (data.type === 'status') {
             setTiktokStatus({
               status: data.status,
@@ -775,11 +863,13 @@ export default function App() {
 
   // Salva e atualiza o número de rodadas já realizadas
   const handleUpdateRoundNumber = async (num: number) => {
-    const next = Math.max(1, num);
+    const next = Math.max(0, num);
+    const now = Date.now();
+    lastResetTimestampRef.current = now;
     setRoundNumber(next);
     saveRoundNumber(next);
     broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: next });
-    saveGameStateToFirestore({ roundNumber: next }).catch(() => {});
+    saveGameStateToFirestore({ roundNumber: next, updatedAt: now }).catch(() => {});
     try {
       await fetch('/api/round-number', {
         method: 'POST',
@@ -817,9 +907,6 @@ export default function App() {
         pointsRef.current.leftGifts = nextLeftGifts;
         setLeftPoints(nextLeft);
         setLeftGiftsCount(nextLeftGifts);
-        setLastLeftUser(user);
-        setLastLeftText(actionText);
-        setLastLeftVoteTimestamp(Date.now());
       } else {
         nextRight += amount;
         if (isGift) nextRightGifts += (amount > 1 ? amount : 1);
@@ -827,9 +914,6 @@ export default function App() {
         pointsRef.current.rightGifts = nextRightGifts;
         setRightPoints(nextRight);
         setRightGiftsCount(nextRightGifts);
-        setLastRightUser(user);
-        setLastRightText(actionText);
-        setLastRightVoteTimestamp(Date.now());
       }
 
       savePoints({
@@ -847,27 +931,22 @@ export default function App() {
         rightGifts: nextRightGifts,
       });
 
-      playVoteSound();
       const icon = giftIcon || (side === 'left' ? leftCandidate.primaryGift.icon : rightCandidate.primaryGift.icon);
-      setLastVoteTimestamp(Date.now());
-      setLastVoteSide(side);
-      setLastVoteActionText(actionText);
-      setLastVoteGiftIcon(icon);
-      setLastVoteAmount(amount);
-      spawnReaction(icon, side);
+      const targetNumber = side === 'left' ? leftCandidate.number : rightCandidate.number;
+      const targetName = side === 'left' ? leftCandidate.name : rightCandidate.name;
 
-      if (amount >= 10) {
-        setEpicGift({
-          id: Date.now(),
-          username: user,
-          giftName: giftName || 'Super Presente',
-          giftIcon: icon,
-          points: amount,
-          candidateNumber: side === 'left' ? leftCandidate.number : rightCandidate.number,
-          candidateName: side === 'left' ? leftCandidate.name : rightCandidate.name,
-          side,
-        });
-      }
+      // Enfileira a animação sequencial na urna eletrônica (cerca de 850ms entre cada presente)
+      enqueueGift({
+        side,
+        amount,
+        giftName,
+        giftIcon: icon,
+        username: user,
+        actionText,
+        isEpic: amount >= 10,
+        candidateNumber: targetNumber,
+        candidateName: targetName,
+      });
 
       // 1. Sincroniza em tempo real no Firebase Firestore para todos os aparelhos
       pushLiveEventToFirestore({
@@ -1071,6 +1150,13 @@ export default function App() {
 
   // Reiniciar Rodada no Firebase Firestore e no servidor
   const handleRestartRound = async () => {
+    const now = Date.now();
+    lastResetTimestampRef.current = now;
+    pointsRef.current.left = 0;
+    pointsRef.current.right = 0;
+    pointsRef.current.leftGifts = 0;
+    pointsRef.current.rightGifts = 0;
+
     setLeftPoints(0);
     setRightPoints(0);
     setLeftGiftsCount(0);
@@ -1081,6 +1167,10 @@ export default function App() {
     setWinner(null);
     setTimeLeft(roundDuration);
     setResetCountdown(5);
+
+    savePoints({ leftPoints: 0, rightPoints: 0, leftGifts: 0, rightGifts: 0 });
+    saveTimeLeft(roundDuration);
+    broadcastSync({ type: 'RESET_ROUND' });
 
     saveGameStateToFirestore({
       leftPoints: 0,
@@ -1093,6 +1183,7 @@ export default function App() {
       winner: 'none',
       timeLeft: roundDuration,
       resetCountdown: 5,
+      updatedAt: now,
     }).catch(() => {});
 
     pushLiveEventToFirestore({ type: 'round_restart' }).catch(() => {});
@@ -1105,6 +1196,11 @@ export default function App() {
   };
 
   const handleForceNextRound = async () => {
+    const nextRound = roundNumber + 1;
+    setRoundNumber(nextRound);
+    saveRoundNumber(nextRound);
+    broadcastSync({ type: 'UPDATE_ROUND_NUMBER', roundNumber: nextRound });
+    saveGameStateToFirestore({ roundNumber: nextRound, updatedAt: Date.now() }).catch(() => {});
     await handleRestartRound();
   };
 

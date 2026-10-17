@@ -575,12 +575,14 @@ setInterval(() => {
       serverState.isRoundOver = false;
       serverState.winner = null;
       serverState.resetCountdown = 5;
+      (serverState as any).updatedAt = Date.now();
 
       saveStateToDisk();
 
       broadcastToClients({
         type: 'ROUND_RESTART',
         state: serverState,
+        isAuthoritativeReset: true,
       });
     }
   }
@@ -686,10 +688,12 @@ app.post('/api/reset-round', (_req: Request, res: Response) => {
   serverState.isRoundOver = false;
   serverState.winner = null;
   serverState.resetCountdown = 5;
+  (serverState as any).updatedAt = Date.now();
   saveStateToDisk();
   broadcastToClients({
     type: 'ROUND_RESTART',
     state: serverState,
+    isAuthoritativeReset: true,
   });
   res.json({ success: true, state: serverState });
 });
@@ -699,10 +703,12 @@ app.post('/api/victory-score', (req: Request, res: Response) => {
   const { victoryScore } = req.body;
   if (victoryScore && typeof victoryScore.left === 'number' && typeof victoryScore.right === 'number') {
     serverState.victoryScore = victoryScore;
+    (serverState as any).updatedAt = Date.now();
     saveStateToDisk();
     broadcastToClients({
       type: 'STATE_SYNC',
       state: serverState,
+      isAuthoritativeReset: true,
     });
     return res.json({ success: true, victoryScore: serverState.victoryScore });
   }
@@ -720,6 +726,7 @@ app.post('/api/reset-series', (_req: Request, res: Response) => {
   broadcastToClients({
     type: 'STATE_SYNC',
     state: serverState,
+    isAuthoritativeReset: true,
   });
   res.json({ success: true, victoryScore: serverState.victoryScore });
 });
@@ -728,12 +735,14 @@ app.post('/api/reset-series', (_req: Request, res: Response) => {
 app.post('/api/round-number', (req: Request, res: Response) => {
   const { roundNumber } = req.body;
   const num = parseInt(roundNumber, 10);
-  if (!isNaN(num) && num >= 1) {
+  if (!isNaN(num) && num >= 0) {
     serverState.roundNumber = num;
+    (serverState as any).updatedAt = Date.now();
     saveStateToDisk();
     broadcastToClients({
       type: 'STATE_SYNC',
       state: serverState,
+      isAuthoritativeReset: true,
     });
     return res.json({ success: true, roundNumber: serverState.roundNumber });
   }
@@ -799,26 +808,8 @@ app.post('/api/state/points', handlePointsUpdate);
 
 // 9.2 Restore state from active client when server wakes up or restarts
 app.post('/api/state/restore', (req: Request, res: Response) => {
-  const { leftPoints, rightPoints, victoryScore, roundNumber, leftCandidate, rightCandidate } = req.body;
+  const { leftCandidate, rightCandidate, bannerSettings } = req.body;
   let changed = false;
-  if (typeof leftPoints === 'number' && leftPoints > serverState.leftPoints) {
-    serverState.leftPoints = leftPoints;
-    changed = true;
-  }
-  if (typeof rightPoints === 'number' && rightPoints > serverState.rightPoints) {
-    serverState.rightPoints = rightPoints;
-    changed = true;
-  }
-  if (victoryScore && typeof victoryScore.left === 'number' && typeof victoryScore.right === 'number') {
-    if (victoryScore.left > serverState.victoryScore.left || victoryScore.right > serverState.victoryScore.right) {
-      serverState.victoryScore = victoryScore;
-      changed = true;
-    }
-  }
-  if (typeof roundNumber === 'number' && roundNumber > serverState.roundNumber) {
-    serverState.roundNumber = roundNumber;
-    changed = true;
-  }
   if (leftCandidate && leftCandidate.name && (!serverState.leftCandidate?.name || serverState.leftCandidate.name === 'LUIZ INÁCIO LULA')) {
     serverState.leftCandidate = leftCandidate;
     changed = true;
@@ -827,9 +818,8 @@ app.post('/api/state/restore', (req: Request, res: Response) => {
     serverState.rightCandidate = rightCandidate;
     changed = true;
   }
-
-  if (req.body.bannerSettings) {
-    serverState.bannerSettings = req.body.bannerSettings;
+  if (bannerSettings && typeof bannerSettings === 'object') {
+    serverState.bannerSettings = bannerSettings;
     changed = true;
   }
 
@@ -845,20 +835,7 @@ app.post('/api/state/restore', (req: Request, res: Response) => {
   res.json({ success: true, state: serverState });
 });
 
-// 9.2.1 Update Banner Settings
-app.post('/api/banner', (req: Request, res: Response) => {
-  const { bannerSettings } = req.body;
-  if (bannerSettings && typeof bannerSettings === 'object') {
-    serverState.bannerSettings = bannerSettings;
-    saveStateToDisk();
-    broadcastToClients({
-      type: 'STATE_SYNC',
-      state: serverState,
-    });
-    return res.json({ success: true, bannerSettings: serverState.bannerSettings });
-  }
-  res.status(400).json({ error: 'Configuração de banner inválida' });
-});
+
 
 // 9.3 Recheck Firebase Connection and Rules Status
 app.post('/api/firebase/recheck', async (_req: Request, res: Response) => {
@@ -1032,13 +1009,28 @@ async function connectToTikTok(targetUsername: string = 'leonardosutello'): Prom
       });
     });
 
+    // Streak tracker para presentes contínuos (combos de rosas, etc.)
+    const giftStreakMap = new Map<string, number>();
+
     // Gift event from TikTok
     conn.on('gift', (data: any) => {
-      if (data.giftType === 1 && !data.repeatEnd) return;
-      const repeatCount = data.repeatCount || 1;
-      const diamondCount = (data.diamondCount || 1) * repeatCount;
-      const giftName = data.giftName || 'Presente';
       const user = data.uniqueId || data.nickname || '@fa_live';
+      const giftName = data.giftName || 'Presente';
+      const rawRepeat = Number(data.repeatCount) || 1;
+      const streakKey = `${user}_${data.giftId || giftName}`;
+
+      let repeatCount = rawRepeat;
+      if (data.giftType === 1) {
+        // Presentes com sequência contínua (ex: Rosas): calcula a diferença enviada nesta etapa
+        const prevRepeat = giftStreakMap.get(streakKey) || 0;
+        repeatCount = Math.max(1, rawRepeat - prevRepeat);
+        giftStreakMap.set(streakKey, rawRepeat);
+        if (data.repeatEnd) {
+          giftStreakMap.delete(streakKey);
+        }
+      }
+
+      const diamondCount = (data.diamondCount || 1) * repeatCount;
       const lowerGift = giftName.toLowerCase();
 
       const leftGifts = [
@@ -1236,8 +1228,14 @@ async function startServer() {
     fetchCloudGameState()
       .then((cloudData) => {
         if (cloudData) {
-          serverState = { ...serverState, ...cloudData };
-          console.log('[Server] Estado restaurado do Firebase Firestore com sucesso! Placar:', serverState.victoryScore);
+          const cloudTime = Number(cloudData.updatedAt) || 0;
+          const localTime = Number((serverState as any).updatedAt) || 0;
+          if (cloudTime > localTime) {
+            serverState = { ...serverState, ...cloudData };
+            console.log('[Server] Estado restaurado do Firebase Firestore com sucesso! Placar:', serverState.victoryScore);
+          } else {
+            console.log(`[Server] Estado do disco é mais recente ou igual ao Firestore (local: ${localTime}, cloud: ${cloudTime}). Mantendo estado local.`);
+          }
         }
       })
       .catch((e) => {

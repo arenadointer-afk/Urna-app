@@ -24,12 +24,16 @@ service cloud.firestore {
 
     function isValidGameState(data) {
       return data is map &&
-        (!('roundNumber' in data) || (data.roundNumber is number && data.roundNumber >= 1)) &&
+        (!('roundNumber' in data) || (data.roundNumber is number && data.roundNumber >= 0)) &&
         (!('roundDuration' in data) || (data.roundDuration is number && data.roundDuration >= 5)) &&
         (!('timeLeft' in data) || (data.timeLeft is number && data.timeLeft >= 0)) &&
         (!('isPaused' in data) || data.isPaused is bool) &&
         (!('leftPoints' in data) || (data.leftPoints is number && data.leftPoints >= 0)) &&
         (!('rightPoints' in data) || (data.rightPoints is number && data.rightPoints >= 0)) &&
+        (!('victoryScore' in data) || data.victoryScore is map) &&
+        (!('bannerSettings' in data) || data.bannerSettings is map) &&
+        (!('musicTrack' in data) || data.musicTrack is string) &&
+        (!('updatedAt' in data) || data.updatedAt is number) &&
         (!('leftCandidate' in data) || isValidCandidate(data.leftCandidate)) &&
         (!('rightCandidate' in data) || isValidCandidate(data.rightCandidate));
     }

@@ -94,46 +94,61 @@ export const BottomLiveFeed: React.FC<BottomLiveFeedProps> = ({
             <div ref={chatEndRef} />
           </div>
 
-          {/* Input Bar & Discreet Controls */}
-          <form onSubmit={handleSubmit} className="pt-0.5 flex items-center gap-1 border-t border-slate-800/70">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={`Digite ${leftCandidate.number} ou ${rightCandidate.number} no chat...`}
-              className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-md px-1.5 py-0.5 text-[9px] sm:text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-            />
-            <button
-              type="submit"
-              className="px-2 py-0.5 rounded-md bg-amber-500 text-zinc-950 font-black text-[9px] flex items-center gap-0.5 cursor-pointer active:scale-95"
-            >
-              <Send className="w-2.5 h-2.5" />
-              <span>Enviar</span>
-            </button>
-
-            {onToggleChat && (
+          {/* Input Bar & Discreet Controls (Oculto no Link Final da Live) */}
+          {isLiveOnlyMode ? (
+            <div className="pt-0.5 flex items-center justify-between text-[7.5px] sm:text-[8px] text-slate-400 font-bold px-1 border-t border-slate-800/70">
+              <span className="flex items-center gap-1.5 text-emerald-400 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span>TikTok LIVE Ao Vivo • Votos e presentes computados automaticamente na Urna</span>
+              </span>
               <button
                 type="button"
-                onClick={onToggleChat}
-                title="Ocultar Chat"
-                className="px-1.5 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[8px] text-slate-400 hover:text-white cursor-pointer font-bold"
+                onClick={onToggleFullscreen}
+                title="Tela Cheia"
+                className="p-0.5 rounded text-slate-400 hover:text-white cursor-pointer ml-1 shrink-0"
               >
-                Ocultar
+                <Maximize className="w-3 h-3" />
               </button>
-            )}
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="pt-0.5 flex items-center gap-1 border-t border-slate-800/70">
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={`Digite ${leftCandidate.number} ou ${rightCandidate.number} no chat...`}
+                className="flex-1 bg-slate-900/90 border border-slate-700/80 rounded-md px-1.5 py-0.5 text-[9px] sm:text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              />
+              <button
+                type="submit"
+                className="px-2 py-0.5 rounded-md bg-amber-500 text-zinc-950 font-black text-[9px] flex items-center gap-0.5 cursor-pointer active:scale-95"
+              >
+                <Send className="w-2.5 h-2.5" />
+                <span>Enviar</span>
+              </button>
 
-            {/* Discreet Fullscreen button */}
-            <button
-              type="button"
-              onClick={onToggleFullscreen}
-              title="Tela Cheia"
-              className="p-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-white cursor-pointer"
-            >
-              <Maximize className="w-3 h-3" />
-            </button>
+              {onToggleChat && (
+                <button
+                  type="button"
+                  onClick={onToggleChat}
+                  title="Ocultar Chat"
+                  className="px-1.5 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-[8px] text-slate-400 hover:text-white cursor-pointer font-bold"
+                >
+                  Ocultar
+                </button>
+              )}
 
-            {/* Discreet Lock Icon for Password Protected Admin */}
-            {!isLiveOnlyMode && (
+              {/* Discreet Fullscreen button */}
+              <button
+                type="button"
+                onClick={onToggleFullscreen}
+                title="Tela Cheia"
+                className="p-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <Maximize className="w-3 h-3" />
+              </button>
+
+              {/* Discreet Lock Icon for Password Protected Admin */}
               <button
                 type="button"
                 onClick={onRequestAdmin}
@@ -142,8 +157,8 @@ export const BottomLiveFeed: React.FC<BottomLiveFeedProps> = ({
               >
                 <Lock className="w-3 h-3" />
               </button>
-            )}
-          </form>
+            </form>
+          )}
         </div>
       ) : (
         /* Modo Compacto sem Chat */

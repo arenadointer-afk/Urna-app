@@ -85,7 +85,7 @@ interface AdminPanelProps {
   onChangeMusicTrack: (track: MusicTrackType, customUrl?: string) => void;
   musicVolume: number;
   onChangeMusicVolume: (volume: number) => void;
-  initialTab?: 'first-live' | 'boosters' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music';
+  initialTab?: 'first-live' | 'boosters' | 'banner' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream' | 'music';
   roundNumber?: number;
   onUpdateRoundNumber?: (num: number) => void;
   victoryScore: VictoryScore;
@@ -101,6 +101,8 @@ interface AdminPanelProps {
   onDisconnectTikTok: () => Promise<void>;
   onSendTestTikTokEvent: (type: 'gift' | 'chat', data: any) => Promise<void>;
   tiktokLogs: Array<{ id: string; timestamp: number; type: 'gift' | 'chat' | 'status' | 'like'; text: string; user?: string }>;
+  bannerSettings?: BannerSettings;
+  onUpdateBannerSettings?: (settings: BannerSettings) => void;
 }
 
 const QUICK_AVATARS = [
@@ -201,8 +203,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onDisconnectTikTok,
   onSendTestTikTokEvent,
   tiktokLogs,
+  bannerSettings,
+  onUpdateBannerSettings,
 }) => {
-  const [activeTab, setActiveTab] = useState<'first-live' | 'boosters' | 'music' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream'>(
+  const [activeTab, setActiveTab] = useState<'first-live' | 'boosters' | 'banner' | 'music' | 'candidates' | 'bot' | 'presets' | 'round' | 'cloud' | 'stream'>(
     initialTab || 'first-live'
   );
   const [editingSide, setEditingSide] = useState<'left' | 'right'>('left');
@@ -219,8 +223,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [audioUploadError, setAudioUploadError] = useState('');
   const [fbStatus, setFbStatus] = useState<FirebaseConnectionStatus>('checking');
   const [fbErrorMsg, setFbErrorMsg] = useState('');
-  const [isTestingFb, setIsTestingFb] = useState(false);
   const [copiedRules, setCopiedRules] = useState(false);
+  const [scoreResetFeedback, setScoreResetFeedback] = useState(false);
+  const [roundResetFeedback, setRoundResetFeedback] = useState(false);
 
   useEffect(() => {
     return subscribeFirebaseConnectionState((st, err) => {
@@ -621,15 +626,18 @@ tiktokLiveConnection.on('gift', data => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('music')}
+            onClick={() => setActiveTab('banner')}
             className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
-              activeTab === 'music'
-                ? 'bg-amber-500 text-zinc-950'
+              activeTab === 'banner'
+                ? 'bg-amber-500 text-zinc-950 font-black'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <Music className="w-3.5 h-3.5" />
-            <span>🎵 Músicas</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Banner da Live</span>
+            {bannerSettings?.enabled && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            )}
           </button>
 
           <button
@@ -1456,13 +1464,18 @@ tiktokLiveConnection.on('gift', data => {
 
                 <button
                   type="button"
-                  onClick={onResetVictoryScore}
-                  className="w-full py-2 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700 font-black text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95 shadow"
+                  onClick={() => {
+                    onResetVictoryScore();
+                    setScoreResetFeedback(true);
+                    setTimeout(() => setScoreResetFeedback(false), 2500);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700 font-black text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-95 shadow"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Zerar Placar</span>
+                  <span>{scoreResetFeedback ? '✓ PLACAR GERAL ZERADO (0 x 0)!' : 'ZERAR PLACAR GERAL (0 x 0)'}</span>
                 </button>
               </div>
+
               {/* Play / Pause / Reset */}
               <div className="grid grid-cols-2 gap-3">
                 <button
@@ -1510,7 +1523,7 @@ tiktokLiveConnection.on('gift', data => {
                 <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800">
                   <button
                     type="button"
-                    onClick={() => onUpdateRoundNumber && onUpdateRoundNumber(Math.max(1, roundNumber - 1))}
+                    onClick={() => onUpdateRoundNumber && onUpdateRoundNumber(Math.max(0, roundNumber - 1))}
                     className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                   >
                     <span>- 1 Rodada</span>
@@ -1527,22 +1540,24 @@ tiktokLiveConnection.on('gift', data => {
                   <div className="flex items-center gap-1.5 ml-auto">
                     <input
                       type="number"
-                      min="1"
+                      min="0"
                       max="999"
                       value={customRoundInput}
                       onChange={(e) => setCustomRoundInput(e.target.value)}
-                      placeholder="Ex: 5"
-                      className="w-20 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-digital font-bold text-center text-white focus:outline-none focus:border-amber-400"
+                      placeholder="Ex: 1"
+                      className="w-16 bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-xs font-digital font-bold text-center text-white focus:outline-none focus:border-amber-400"
                     />
                     <button
                       type="button"
                       onClick={() => {
                         const parsed = parseInt(customRoundInput, 10);
-                        if (!isNaN(parsed) && parsed >= 1 && onUpdateRoundNumber) {
+                        if (!isNaN(parsed) && parsed >= 0 && onUpdateRoundNumber) {
                           onUpdateRoundNumber(parsed);
+                          setRoundResetFeedback(true);
+                          setTimeout(() => setRoundResetFeedback(false), 2000);
                         }
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-slate-600 cursor-pointer active:scale-95 transition-all"
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs border border-slate-600 cursor-pointer active:scale-95 transition-all"
                     >
                       Definir
                     </button>
@@ -1552,12 +1567,14 @@ tiktokLiveConnection.on('gift', data => {
                         if (onUpdateRoundNumber) {
                           onUpdateRoundNumber(1);
                           setCustomRoundInput('1');
+                          setRoundResetFeedback(true);
+                          setTimeout(() => setRoundResetFeedback(false), 2500);
                         }
                       }}
-                      className="px-2.5 py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 text-red-300 font-bold text-[11px] border border-red-800/60 cursor-pointer active:scale-95 transition-all"
-                      title="Zerar contagem para rodada 1"
+                      className="px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-200 font-bold text-xs border border-red-700 cursor-pointer active:scale-95 transition-all shadow"
                     >
-                      Resetar p/ 1
+                      <RotateCcw className="w-3 h-3 inline mr-1" />
+                      <span>{roundResetFeedback ? '✓ Zerado p/ 1!' : 'Zerar p/ #1'}</span>
                     </button>
                   </div>
                 </div>
@@ -2624,6 +2641,167 @@ tiktokLiveConnection.on('gift', data => {
                 >
                   {streamSettings.soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: BANNER INTERATIVO */}
+          {activeTab === 'banner' && bannerSettings && onUpdateBannerSettings && (
+            <div className="space-y-4">
+              {/* Ativar/Desativar Banner */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-extrabold text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    Exibir Banner na Tela Principal
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Mostra imagem ou anúncio chamativo entre os candidatos e a urna.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={bannerSettings.enabled}
+                  onChange={(e) => onUpdateBannerSettings({ ...bannerSettings, enabled: e.target.checked })}
+                  className="w-5 h-5 rounded text-amber-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Pré-visualização do Banner Atual */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 block">
+                  Pré-visualização do Banner:
+                </label>
+                <div className="p-2 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden">
+                  {bannerSettings.url ? (
+                    <img
+                      src={bannerSettings.url}
+                      alt="Preview Banner"
+                      className={`max-h-24 w-full rounded-xl ${bannerSettings.fit === 'contain' ? 'object-contain' : 'object-cover'}`}
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-500 py-4">Nenhum banner configurado</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Modelos Prontos de Banners */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-300 block">
+                  🎨 Escolha um Tema Pronto de Banner:
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {BANNER_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => onUpdateBannerSettings({ ...bannerSettings, url: preset.url, enabled: true })}
+                      className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
+                        bannerSettings.url === preset.url
+                          ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-500/50 text-white shadow-lg'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-black text-xs text-amber-300">{preset.title}</span>
+                        {bannerSettings.url === preset.url && <Check className="w-4 h-4 text-amber-400" />}
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-tight">
+                        {preset.subtitle}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Configurações de Posição & Altura */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {/* Posição */}
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-300 block">Posição:</label>
+                  <select
+                    value={bannerSettings.position || 'between_candidates_and_urna'}
+                    onChange={(e) => onUpdateBannerSettings({ ...bannerSettings, position: e.target.value as any })}
+                    className="w-full p-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                  >
+                    <option value="between_candidates_and_urna">Entre Candidatos e Urna (Padrão)</option>
+                    <option value="above_candidates">Acima dos Candidatos</option>
+                    <option value="below_urna">Abaixo da Urna</option>
+                  </select>
+                </div>
+
+                {/* Altura */}
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-300 block">Altura:</label>
+                  <select
+                    value={bannerSettings.height || 'normal'}
+                    onChange={(e) => onUpdateBannerSettings({ ...bannerSettings, height: e.target.value as any })}
+                    className="w-full p-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                  >
+                    <option value="compact">Compacto (Menor)</option>
+                    <option value="normal">Normal (Equilibrado)</option>
+                    <option value="tall">Grande / Destaque</option>
+                  </select>
+                </div>
+
+                {/* Enquadramento */}
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-300 block">Enquadramento:</label>
+                  <select
+                    value={bannerSettings.fit || 'cover'}
+                    onChange={(e) => onUpdateBannerSettings({ ...bannerSettings, fit: e.target.value as any })}
+                    className="w-full p-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                  >
+                    <option value="cover">Preencher (Cover)</option>
+                    <option value="contain">Conter sem Cortar (Contain)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* URL Personalizada ou Upload */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <label className="text-xs font-bold text-slate-300 block">
+                  Ou Insira a URL da Imagem do Banner:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={bannerSettings.url}
+                    onChange={(e) => onUpdateBannerSettings({ ...bannerSettings, url: e.target.value, enabled: true })}
+                    placeholder="https://... ou data:image/..."
+                    className="flex-1 p-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                  />
+                </div>
+                <div className="flex items-center justify-between pt-1">
+                  <label className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold cursor-pointer flex items-center gap-1.5 border border-slate-700">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Carregar Arquivo de Imagem</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const result = ev.target?.result as string;
+                          if (result) {
+                            onUpdateBannerSettings({ ...bannerSettings, url: result, enabled: true });
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateBannerSettings({ ...bannerSettings, enabled: false })}
+                    className="text-xs text-red-400 hover:underline cursor-pointer"
+                  >
+                    Ocultar Banner
+                  </button>
+                </div>
               </div>
             </div>
           )}
